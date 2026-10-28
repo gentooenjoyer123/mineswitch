@@ -4,7 +4,7 @@ BUILD ?= $(CURDIR)/build-host
 CPPFLAGS += -Iinclude $(shell pkg-config --cflags sdl2 freetype2 libcurl jansson minizip libwebp)
 CXXFLAGS += -std=c++17 -O2 -g -Wall -Wextra -Werror -MMD -MP
 LDLIBS += $(shell pkg-config --libs sdl2 freetype2 libcurl jansson minizip libwebp) -lmbedcrypto -lz -pthread
-SOURCES := drawing frontend http storage import catalog prepare repair loading heap mods nbt content versions images packwiz
+SOURCES := drawing frontend http storage import catalog prepare repair loading heap mods nbt content versions images packwiz i18n
 OBJECTS := $(addprefix $(BUILD)/,$(addsuffix .o,$(SOURCES)))
 .PHONY: all tests check ui-check http-check
 all: $(BUILD)/mineswitch-launcher

@@ -36,12 +36,12 @@ bool ends(const std::string &s, const std::string &suffix) {
 }
 void cancelled(const std::atomic_bool *stop) {
     if (stop && stop->load())
-        throw Error("cancelled", "Операция отменена");
+        throw Error("cancelled", "Operation cancelled");
 }
 // A single directory entry name returned by one of the list functions.
 std::string entryName(const std::string &name) {
     if (name.empty() || name == "." || name == ".." || name.find('/') != std::string::npos || !validRelativePath(name))
-        throw Error("content.name", "Некорректное имя файла");
+        throw Error("content.name", "Invalid file name");
     return name;
 }
 struct Stat {
@@ -68,7 +68,7 @@ std::vector<std::string> names(const std::string &folder) {
     requireSafePath(folder);
     DIR *raw = ::opendir(folder.c_str());
     if (!raw)
-        throw Error("content.list", "Не удалось открыть папку");
+        throw Error("content.list", "Could not open the folder");
     std::unique_ptr<DIR, int (*)(DIR *)> directory(raw, ::closedir);
     while (auto *entry = ::readdir(directory.get())) {
         std::string name = entry->d_name;
@@ -89,7 +89,7 @@ void publish(const std::string &from, const std::string &to) {
     // Horizon's filesystem rename fails when the destination already exists.
     if (pathExists(to) || std::rename(from.c_str(), to.c_str()) != 0)
 #endif
-        throw Error("content.rename", "Не удалось переместить: " + std::string(std::strerror(errno)));
+        throw Error("content.rename", "Could not move: " + std::string(std::strerror(errno)));
 }
 std::string readFile(const std::string &path, std::size_t maximum) { return readTextFile(path, maximum); }
 
@@ -98,7 +98,7 @@ void walk(const std::string &root, const std::string &relative,
           const std::function<bool(const std::string &, bool)> &keep,
           const std::function<void(const std::string &, const Stat &)> &file, unsigned depth = 0) {
     if (depth > 64)
-        throw Error("content.depth", "Слишком глубокая вложенность папок");
+        throw Error("content.depth", "Folders are nested too deeply");
     auto folder = relative.empty() ? root : joinPath(root, relative);
     for (const auto &name : names(folder)) {
         auto child = relative.empty() ? name : relative + "/" + name;
@@ -133,7 +133,7 @@ struct Copier {
     void stream(const std::string &from, const std::function<void(const char *, std::size_t)> &sink) {
         int fd = ::open(from.c_str(), O_RDONLY);
         if (fd < 0)
-            throw Error("content.read", "Не удалось открыть " + from);
+            throw Error("content.read", "Could not open " + from);
         std::unique_ptr<int, void (*)(int *)> guard(&fd, [](int *value) { ::close(*value); });
         while (true) {
             cancelled(stop);
@@ -141,7 +141,7 @@ struct Copier {
             if (amount < 0 && errno == EINTR)
                 continue;
             if (amount < 0)
-                throw Error("content.read", "Ошибка чтения " + from);
+                throw Error("content.read", "Could not read " + from);
             if (amount == 0)
                 break;
             sink(buffer.data(), static_cast<std::size_t>(amount));
@@ -158,7 +158,7 @@ struct Copier {
                     if (written < 0 && errno == EINTR)
                         continue;
                     if (written <= 0)
-                        throw Error("disk_space", "Не удалось записать файл");
+                        throw Error("disk_space", "Could not write the file");
                     offset += static_cast<std::size_t>(written);
                 }
             });
@@ -188,10 +188,10 @@ class ZipWriter {
     explicit ZipWriter(const std::string &path) : path_(path) {
         requireSafePath(path, true);
         if (pathExists(path))
-            throw Error("content.exists", "Файл уже существует");
+            throw Error("content.exists", "The file already exists");
         file_ = zipOpen64(path.c_str(), APPEND_STATUS_CREATE);
         if (!file_)
-            throw Error("content.zip", "Не удалось создать ZIP");
+            throw Error("content.zip", "Could not create the ZIP");
     }
     ~ZipWriter() {
         if (file_)
@@ -209,13 +209,13 @@ class ZipWriter {
             info.tmz_date.tm_year = local->tm_year + 1900;
         }
         if (zipOpenNewFileInZip64(file_, name.c_str(), &info, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, 6, 1) != ZIP_OK)
-            throw Error("content.zip", "Не удалось добавить файл в ZIP");
+            throw Error("content.zip", "Could not add a file to the ZIP");
         copier.stream(source, [&](const char *data, std::size_t size) {
             if (zipWriteInFileInZip(file_, data, static_cast<unsigned>(size)) != ZIP_OK)
-                throw Error("disk_space", "Не удалось записать ZIP");
+                throw Error("disk_space", "Could not write the ZIP");
         });
         if (zipCloseFileInZip(file_) != ZIP_OK)
-            throw Error("content.zip", "Не удалось завершить запись в ZIP");
+            throw Error("content.zip", "Could not finish a ZIP entry");
         ++copier.files;
         copier.report(name);
     }
@@ -224,13 +224,13 @@ class ZipWriter {
         if (zipOpenNewFileInZip64(file_, name.c_str(), &info, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, 6, 0) != ZIP_OK ||
             zipWriteInFileInZip(file_, data.data(), static_cast<unsigned>(data.size())) != ZIP_OK ||
             zipCloseFileInZip(file_) != ZIP_OK)
-            throw Error("content.zip", "Не удалось записать ZIP");
+            throw Error("content.zip", "Could not write the ZIP");
     }
     void finish() {
         auto result = zipClose(file_, nullptr);
         file_ = nullptr;
         if (result != ZIP_OK)
-            throw Error("content.zip", "Не удалось завершить ZIP");
+            throw Error("content.zip", "Could not finish the ZIP");
     }
 };
 std::string stamp() {
@@ -288,7 +288,7 @@ std::string stripFormatting(const std::string &text) {
 std::string zipMember(const std::string &path, const char *member, std::size_t maximum) {
     unzFile zip = unzOpen64(path.c_str());
     if (!zip)
-        throw Error("content.archive", "Файл не является ZIP-архивом");
+        throw Error("content.archive", "The file is not a ZIP archive");
     std::unique_ptr<void, int (*)(unzFile)> close(zip, unzClose);
     if (unzLocateFile(zip, member, 1) != UNZ_OK)
         return {};
@@ -326,10 +326,10 @@ std::string instanceRoot(const Storage &storage, const Instance &instance) {
     if (instance.id.empty() || instance.id.size() > 64 ||
         instance.id.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") !=
             std::string::npos)
-        throw Error("content.instance", "Некорректная сборка");
+        throw Error("content.instance", "Invalid instance");
     auto root = joinPath(storage.root(), "instances/" + instance.id);
     if (!instance.root.empty() && instance.root != root)
-        throw Error("content.instance", "Сборка находится вне библиотеки");
+        throw Error("content.instance", "The instance is outside the library");
     requireSafePath(root);
     return root;
 }
@@ -348,7 +348,7 @@ LocalFile digestFile(const std::string &path, const std::atomic_bool *stop) {
     mbedtls_md_init(&context);
     std::unique_ptr<mbedtls_md_context_t, void (*)(mbedtls_md_context_t *)> guard(&context, mbedtls_md_free);
     if (mbedtls_md_setup(&context, mbedtls_md_info_from_type(MBEDTLS_MD_SHA1), 0) || mbedtls_md_starts(&context))
-        throw Error("content.hash", "Не удалось вычислить SHA-1");
+        throw Error("content.hash", "Could not compute SHA-1");
     // CurseForge fingerprints are MurmurHash2 (seed 1) of the file without
     // tab, LF, CR and space bytes, so the filtered length is needed first.
     auto ignored = [](unsigned char c) { return c == 9 || c == 10 || c == 13 || c == 32; };
@@ -440,9 +440,9 @@ void setPackEnabled(const Storage &storage, const Instance &instance, ContentKin
     auto folder = joinPath(instanceRoot(storage, instance), std::string("game/") + contentFolder(kind));
     auto target = enabled ? name.substr(0, name.size() - 9) : name + ".disabled";
     if (!inspect(joinPath(folder, name)).exists)
-        throw Error("content.missing", "Файл больше не найден");
+        throw Error("content.missing", "The file no longer exists");
     if (inspect(joinPath(folder, target)).exists)
-        throw Error("content.exists", "Уже есть файл с именем " + target);
+        throw Error("content.exists", "A file with this name already exists: " + target);
     publish(joinPath(folder, name), joinPath(folder, target));
 }
 
@@ -453,28 +453,28 @@ void removeContent(const Storage &storage, const Instance &instance, ContentKind
     requireSafePath(path);
     auto info = inspect(path);
     if (!info.exists)
-        throw Error("content.missing", "Файл больше не найден");
+        throw Error("content.missing", "The file no longer exists");
     if (info.directory)
         removeOwnedTree(path);
     else if (::unlink(path.c_str()) != 0)
-        throw Error("content.remove", "Не удалось удалить файл: " + std::string(std::strerror(errno)));
+        throw Error("content.remove", "Could not delete the file: " + std::string(std::strerror(errno)));
 }
 
 void installPack(Storage &storage, HttpClient &http, const Instance &instance, ContentKind kind,
                  const CatalogVersion &version, ProgressCallback progress, const std::atomic_bool *stop) {
     if (kind != ContentKind::ResourcePack && kind != ContentKind::ShaderPack)
-        throw Error("content.kind", "Неподдерживаемый тип пакета");
+        throw Error("content.kind", "Unsupported pack type");
     auto file = version.archive;
     if (!ends(lower(file.file_name), ".zip") || file.hashes.empty())
-        throw Error("content.download", "Каталог не предоставил проверяемый ZIP");
+        throw Error("content.download", "The catalog did not provide a verifiable ZIP");
     if (file.manual || file.urls.empty())
-        throw Error("mods.manual_download", "Автор разрешает только ручную загрузку: " + file.manual_url);
+        throw Error("mods.manual_download", "The author allows manual download only: " + file.manual_url);
     auto name = entryName(file.file_name);
     auto root = instanceRoot(storage, instance);
     auto available = storage.availableBytes();
     constexpr std::uint64_t margin = 32 * 1024 * 1024;
     if (available <= margin || file.bytes > available - margin)
-        throw Error("disk_space", "Недостаточно места на SD-карте");
+        throw Error("disk_space", "Not enough space on the SD card");
     file.max_bytes = std::min<std::uint64_t>({file.max_bytes, 2ULL * 1024 * 1024 * 1024, available - margin});
     auto stage = joinPath(storage.root(), "transactions/" + newId());
     createDirectories(stage);
@@ -493,7 +493,7 @@ void installPack(Storage &storage, HttpClient &http, const Instance &instance, C
     verifyFile(temporary, file.hashes, file.max_bytes, stop);
     unzFile zip = unzOpen64(temporary.c_str());
     if (!zip)
-        throw Error("content.archive", "Скачанный файл не является ZIP-архивом");
+        throw Error("content.archive", "The downloaded file is not a ZIP archive");
     unzClose(zip);
     std::lock_guard<std::mutex> lock(content_mutex);
     auto folder = joinPath(root, std::string("game/") + contentFolder(kind));
@@ -503,7 +503,7 @@ void installPack(Storage &storage, HttpClient &http, const Instance &instance, C
         if (ends(key, ".disabled"))
             key.resize(key.size() - 9);
         if (key == lower(name))
-            throw Error("content.exists", "Файл уже установлен: " + existing);
+            throw Error("content.exists", "File already installed: " + existing);
     }
     publish(temporary, joinPath(folder, name));
     if (progress) {
@@ -530,7 +530,7 @@ std::vector<WorldInfo> listWorlds(const Storage &storage, const Instance &instan
             auto root = readLevel(path);
             auto *data = root.find("Data");
             if (!data || data->type != TagType::Compound)
-                throw Error("nbt.invalid", "В level.dat нет данных мира");
+                throw Error("nbt.invalid", "level.dat has no world data");
             auto level = data->string("LevelName");
             if (!level.empty())
                 world.name = level;
@@ -553,19 +553,19 @@ void deleteWorld(const Storage &storage, const Instance &instance, const std::st
     std::lock_guard<std::mutex> lock(content_mutex);
     auto path = joinPath(worldsFolder(storage, instance), entryName(folder));
     if (!inspect(path).directory)
-        throw Error("content.missing", "Мир больше не найден");
+        throw Error("content.missing", "The world no longer exists");
     removeOwnedTree(path);
 }
 
 void renameWorld(const Storage &storage, const Instance &instance, const std::string &folder, const std::string &name) {
     if (name.empty() || name.size() > 128)
-        throw Error("content.name", "Название мира: от 1 до 128 байт");
+        throw Error("content.name", "World name: 1 to 128 bytes");
     std::lock_guard<std::mutex> lock(content_mutex);
     auto path = joinPath(worldsFolder(storage, instance), entryName(folder));
     auto root = readLevel(path);
     auto *data = root.find("Data");
     if (!data || data->type != TagType::Compound)
-        throw Error("nbt.invalid", "В level.dat нет данных мира");
+        throw Error("nbt.invalid", "level.dat has no world data");
     data->set("LevelName", TagType::String).text = name;
     atomicWriteText(joinPath(path, "level.dat"), gzipData(writeNbt(root)));
 }
@@ -575,7 +575,7 @@ std::string copyWorld(const Storage &storage, const Instance &instance, const st
     auto saves = worldsFolder(storage, instance);
     auto source = joinPath(saves, entryName(folder));
     if (!inspect(source).directory)
-        throw Error("content.missing", "Мир больше не найден");
+        throw Error("content.missing", "The world no longer exists");
     std::string target;
     for (int n = 1; n < 1000 && target.empty(); ++n) {
         auto candidate = safeName(folder, "World") + "-copy" + (n > 1 ? "-" + std::to_string(n) : "");
@@ -583,7 +583,7 @@ std::string copyWorld(const Storage &storage, const Instance &instance, const st
             target = candidate;
     }
     if (target.empty())
-        throw Error("content.exists", "Слишком много копий этого мира");
+        throw Error("content.exists", "Too many copies of this world");
     auto skip = [](const std::string &relative, bool) { return relative != "session.lock"; };
     Copier copier{progress, stop, "copy"};
     copier.total = treeBytes(source, skip);
@@ -602,7 +602,7 @@ std::string copyWorld(const Storage &storage, const Instance &instance, const st
         auto root = readLevel(joinPath(saves, target));
         if (auto *data = root.find("Data")) {
             auto name = data->string("LevelName");
-            renameWorld(storage, instance, target, (name.empty() ? folder : name) + " (копия)");
+            renameWorld(storage, instance, target, (name.empty() ? folder : name) + " (copy)");
         }
     } catch (const Error &) {
         // The copy is complete even if its display name cannot be changed.
@@ -614,7 +614,7 @@ std::string backupWorld(const Storage &storage, const Instance &instance, const 
                         ProgressCallback progress, const std::atomic_bool *stop) {
     auto source = joinPath(worldsFolder(storage, instance), entryName(folder));
     if (!inspect(source).directory)
-        throw Error("content.missing", "Мир больше не найден");
+        throw Error("content.missing", "The world no longer exists");
     auto backups = joinPath(instanceRoot(storage, instance), "game/backups");
     createDirectories(backups);
     auto target = joinPath(backups, stamp() + "_" + safeName(folder, "World") + ".zip");
@@ -678,7 +678,7 @@ void saveServers(const Storage &storage, const Instance &instance, const std::ve
     list.list_type = TagType::Compound;
     for (const auto &entry : entries) {
         if (entry.address.empty() || entry.address.size() > 255 || entry.name.size() > 255)
-            throw Error("content.server", "Адрес сервера: от 1 до 255 символов");
+            throw Error("content.server", "Server address: 1 to 255 characters");
         Tag item;
         if (entry.original >= 0 && static_cast<std::size_t>(entry.original) < previous.size() &&
             previous[entry.original].type == TagType::Compound)
@@ -713,9 +713,9 @@ std::vector<MediaFile> listScreenshots(const Storage &storage, const Instance &i
 void deleteScreenshot(const Storage &storage, const Instance &instance, const std::string &name) {
     auto path = joinPath(joinPath(instanceRoot(storage, instance), "game/screenshots"), entryName(name));
     if (!inspect(path).regular)
-        throw Error("content.missing", "Скриншот больше не найден");
+        throw Error("content.missing", "The screenshot no longer exists");
     if (::unlink(path.c_str()) != 0)
-        throw Error("content.remove", "Не удалось удалить скриншот");
+        throw Error("content.remove", "Could not delete the screenshot");
 }
 
 std::vector<MediaFile> listLogs(const Storage &storage, const Instance &instance) {
@@ -732,8 +732,8 @@ std::vector<MediaFile> listLogs(const Storage &storage, const Instance &instance
         }
     };
     add("game/logs", "", [](const std::string &n) { return ends(n, ".log") || ends(n, ".log.gz"); });
-    add("game/crash-reports", "Краш · ", [](const std::string &n) { return ends(n, ".txt"); });
-    add("preparation", "Подготовка · ", [](const std::string &n) { return ends(n, ".log"); });
+    add("game/crash-reports", "Crash · ", [](const std::string &n) { return ends(n, ".txt"); });
+    add("preparation", "Preparation · ", [](const std::string &n) { return ends(n, ".log"); });
     std::sort(result.begin(), result.end(), [](const auto &a, const auto &b) {
         bool al = a.name == "latest.log", bl = b.name == "latest.log";
         if (al != bl)
@@ -747,22 +747,22 @@ std::vector<std::string> readLog(const Storage &storage, const Instance &instanc
                                  std::size_t maximum) {
     auto root = instanceRoot(storage, instance) + "/";
     if (path.compare(0, root.size(), root) != 0)
-        throw Error("content.path", "Журнал вне папки сборки");
+        throw Error("content.path", "The log is outside the instance folder");
     requireSafePath(path);
     auto info = inspect(path);
     if (!info.regular)
-        throw Error("content.missing", "Журнал больше не найден");
+        throw Error("content.missing", "The log no longer exists");
     std::string data;
     if (ends(lower(path), ".gz")) {
         data = inflateData(readFile(path, 16 * 1024 * 1024), 64 * 1024 * 1024);
     } else {
         int fd = ::open(path.c_str(), O_RDONLY);
         if (fd < 0)
-            throw Error("content.read", "Не удалось открыть журнал");
+            throw Error("content.read", "Could not open the log");
         std::unique_ptr<int, void (*)(int *)> guard(&fd, [](int *value) { ::close(*value); });
         off_t start = info.bytes > maximum ? static_cast<off_t>(info.bytes - maximum) : 0;
         if (::lseek(fd, start, SEEK_SET) < 0)
-            throw Error("content.read", "Не удалось прочитать журнал");
+            throw Error("content.read", "Could not read the log");
         data.resize(static_cast<std::size_t>(info.bytes - static_cast<std::uint64_t>(start)));
         std::size_t offset = 0;
         while (offset < data.size()) {
@@ -797,7 +797,7 @@ Instance duplicateInstance(Storage &storage, const Instance &instance, const std
                            ProgressCallback progress, const std::atomic_bool *stop) {
     auto source = instanceRoot(storage, instance);
     if (name.empty() || name.size() > 120)
-        throw Error("content.name", "Название сборки: от 1 до 120 байт");
+        throw Error("content.name", "Instance name: 1 to 120 bytes");
     // Generated state refers to the original paths and is rebuilt on preparation.
     auto keep = [](const std::string &relative, bool) {
         return relative != "instance.json" && relative != "launch-plan.json" && relative != "tmp" &&
@@ -808,7 +808,7 @@ Instance duplicateInstance(Storage &storage, const Instance &instance, const std
     copier.total = treeBytes(source, keep);
     auto available = storage.availableBytes();
     if (copier.total + 64 * 1024 * 1024 > available)
-        throw Error("disk_space", "Недостаточно места на SD-карте для копии");
+        throw Error("disk_space", "Not enough space on the SD card for the copy");
     auto stage = joinPath(storage.root(), "transactions/" + newId());
     Instance copy = instance;
     copy.id = newId();
@@ -817,7 +817,7 @@ Instance duplicateInstance(Storage &storage, const Instance &instance, const std
     copy.last_played = 0;
     if (copy.state != InstanceState::NeedsFiles && copy.state != InstanceState::Unsupported) {
         copy.state = InstanceState::NeedsPreparation;
-        copy.reason = "Копия: файлы игры будут проверены перед запуском";
+        copy.reason = "Copy: game files will be verified before launch";
     }
     try {
         copier.tree(source, stage, keep);
@@ -836,7 +836,7 @@ Instance duplicateInstance(Storage &storage, const Instance &instance, const std
 void deleteInstance(Storage &storage, const Instance &instance) {
     auto root = instanceRoot(storage, instance);
     if (!inspect(root).directory)
-        throw Error("content.missing", "Сборка больше не найдена");
+        throw Error("content.missing", "The instance no longer exists");
     // An interrupted removal is finished by the startup transaction sweep.
     auto trash = joinPath(storage.root(), "transactions/" + newId());
     publish(root, trash);
@@ -877,7 +877,7 @@ std::string exportInstance(Storage &storage, const Instance &instance, ProgressC
     json_object_set_new(pack.get(), "formatVersion", json_integer(1));
     char *pack_text = json_dumps(pack.get(), JSON_INDENT(2));
     if (!pack_text)
-        throw Error("content.export", "Не удалось подготовить mmc-pack.json");
+        throw Error("content.export", "Could not prepare mmc-pack.json");
     std::string mmc_pack(pack_text);
     std::free(pack_text);
     std::string cfg = "InstanceType=OneSix\nname=" + instance.name + "\n";

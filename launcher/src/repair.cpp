@@ -130,8 +130,8 @@ Instance verifyManualFiles(Storage& storage, Instance instance, ProgressCallback
     atomicWriteJson(path, remaining.get(), kInstanceManifestMaxBytes);
     auto count = json_array_size(remaining.get());
     instance.state = count ? InstanceState::NeedsFiles : InstanceState::NeedsPreparation;
-    instance.reason = count ? "Осталось файлов: " + std::to_string(count) + ". Проверь имена и контрольные суммы." :
-                              "Все файлы сборки проверены. Можно подготовить Minecraft.";
+    instance.reason = count ? "Files remaining: " + std::to_string(count) + ". Check the names and checksums." :
+                              "All pack files are verified. Minecraft can be prepared now.";
     instance.installed_bytes = installed_bytes;
     storage.saveInstance(instance);
     return instance;

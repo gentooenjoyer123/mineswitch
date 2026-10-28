@@ -70,6 +70,15 @@ int main(){
         auto linked=joinPath(instance.root,"game/mods/link.jar");check(symlink(http.source.c_str(),linked.c_str())==0,"symlink fixture");
         bool refused=false;try{manager.setEnabled(instance,"link.jar",false);}catch(const Error&){refused=true;}
         check(refused && !pathExists(linked+".disabled"),"symlink cannot be toggled or replace an outside file");unlink(linked.c_str());
+        {   // Fabric accepts raw newlines in strings and comments in fabric.mod.json.
+            auto lenient=joinPath(instance.root,"game/mods/lenient.jar");
+            zipFile file=zipOpen64(lenient.c_str(),APPEND_STATUS_CREATE);check(file,"create lenient jar");
+            std::string metadata="{\"schemaVersion\":1, // comment\n\"id\":\"lenient\",\"name\":\"Lenient\",\"description\":\"two\nlines\",\"version\":\"2\"}";
+            check(zipOpenNewFileInZip64(file,"fabric.mod.json",nullptr,nullptr,0,nullptr,0,nullptr,Z_DEFLATED,Z_DEFAULT_COMPRESSION,0)==ZIP_OK,"lenient entry");
+            check(zipWriteInFileInZip(file,metadata.data(),metadata.size())==ZIP_OK && zipCloseFileInZip(file)==ZIP_OK && zipClose(file,nullptr)==ZIP_OK,"lenient write");
+            bool found=false;for(const auto& mod:manager.list(instance))found|=mod.id=="lenient" && mod.name=="Lenient" && mod.problem.empty();
+            check(found,"lenient fabric.mod.json is read like Fabric Loader does");unlink(lenient.c_str());
+        }
         std::cout<<"MODS_TEST_PASS checks="<<checks<<" real jars,hashes,toggle roundtrip,duplicates,cancellation,collisions,path/loader/version checks\n";
         removeOwnedTree(root);return 0;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';try{removeOwnedTree(root);}catch(...){}return 1;}

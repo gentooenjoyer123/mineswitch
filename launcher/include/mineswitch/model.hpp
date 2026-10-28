@@ -110,6 +110,7 @@ struct Settings {
     std::string jvm_args; // Extra validated JVM options for every instance.
     int library_sort = 0; // 0 name, 1 last played, 2 Minecraft version.
     bool full_initial_heap = false; // -Xms equal to -Xmx instead of 256 MiB.
+    std::string language = "en"; // UI language: "en" or "ru".
 };
 struct Progress {
     std::string stage, detail;

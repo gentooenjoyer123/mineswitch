@@ -34,7 +34,7 @@ previous direct-game MVP NRO.
   page in lists; the right stick scrolls. Touch: tap to select, drag to scroll.
   Plus exits, cancelling an active job and waiting for its file cleanup first.
 - Desktop: arrows, Enter, Escape, X, Y, Tab/Shift+Tab, PageUp/PageDown, mouse wheel.
-- Two background lanes: installs/preparation/copies (shown under «Задачи») and
+- Two background lanes: installs/preparation/copies (shown under "Tasks") and
   light queries (search, lists, version lists), so catalogs stay usable during a
   download. Errors appear as toasts and in the task history.
 
@@ -53,9 +53,10 @@ PolyMC-style features:
   copy, delete. Servers: add/edit/reorder/delete in `servers.dat`, join directly.
 - Screenshot gallery and viewer, log viewer (gzip logs and crash reports).
 - Catalog: icons (PNG/JPEG/WebP), sort by relevance/downloads/updated,
-  incremental «Показать ещё».
+  incremental "Show more".
 - Settings: offline profiles (add, rename, delete, select), default memory,
-  global JVM options, CurseForge key, animations, cache cleanup.
+  global JVM options, CurseForge key, interface language (English by default,
+  Russian available), animations, cache cleanup.
 - Not implemented: Microsoft sign-in, instance groups, other Java versions (in
   progress separately), Technic/ATLauncher/FTB catalogs.
 
@@ -99,7 +100,7 @@ Author-restricted downloads remain manual unless the same public artifact is fou
 on Modrinth with matching SHA-1 and size.
 
 For a manual file, use its `manual_url` from `missing-files.json` and copy it to
-the listed path below that instance's `game/` directory. Select **Проверить файлы**
+the listed path below that instance's `game/` directory. Select **Check files**
 in the instance. The launcher checks its published size and hashes; a filename
 alone never unlocks preparation. Unresolved file IDs still need provider metadata.
 

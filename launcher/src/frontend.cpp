@@ -3,6 +3,7 @@
 #include "mineswitch/content.hpp"
 #include "mineswitch/drawing.hpp"
 #include "mineswitch/heap.hpp"
+#include "mineswitch/i18n.hpp"
 #include "mineswitch/images.hpp"
 #include "mineswitch/import.hpp"
 #include "mineswitch/mods.hpp"
@@ -38,27 +39,24 @@ namespace {
 std::string sizeText(std::uint64_t bytes) {
     char value[40];
     if (bytes >= (1ULL << 30))
-        std::snprintf(value, sizeof(value), "%.1f ГБ", bytes / double(1ULL << 30));
+        std::snprintf(value, sizeof(value), "%.1f", bytes / double(1ULL << 30));
     else if (bytes >= (1ULL << 20))
-        std::snprintf(value, sizeof(value), "%.0f МБ", bytes / double(1ULL << 20));
+        std::snprintf(value, sizeof(value), "%.0f", bytes / double(1ULL << 20));
     else
-        std::snprintf(value, sizeof(value), "%.0f КБ", bytes / 1024.0);
-    return value;
+        std::snprintf(value, sizeof(value), "%.0f", bytes / 1024.0);
+    return trf(bytes >= (1ULL << 30) ? "{0} GB" : bytes >= (1ULL << 20) ? "{0} MB" : "{0} KB", {value});
 }
-std::string countText(std::uint64_t n) {
+std::string mibText(int mib) { return trf("{0} MB", {std::to_string(mib)}); }
+// Download counts: 1.2M, 3.4K.
+std::string amountText(std::uint64_t n) {
     char value[32];
     if (n >= 1000000)
-        std::snprintf(value, sizeof(value), "%.1f млн", n / 1e6);
+        std::snprintf(value, sizeof(value), "%.1f", n / 1e6);
     else if (n >= 1000)
-        std::snprintf(value, sizeof(value), "%.1f тыс.", n / 1e3);
+        std::snprintf(value, sizeof(value), "%.1f", n / 1e3);
     else
         std::snprintf(value, sizeof(value), "%llu", static_cast<unsigned long long>(n));
-    return value;
-}
-std::string plural(long n, const char *one, const char *few, const char *many) {
-    auto m = n % 100;
-    auto word = m >= 11 && m <= 14 ? many : n % 10 == 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many;
-    return std::to_string(n) + " " + word;
+    return n >= 1000000 ? trf("{0}M", {value}) : n >= 1000 ? trf("{0}K", {value}) : std::string(value);
 }
 std::string dateText(std::int64_t seconds) {
     std::time_t when = static_cast<std::time_t>(seconds);
@@ -69,21 +67,21 @@ std::string dateText(std::int64_t seconds) {
 }
 std::string agoText(std::int64_t seconds) {
     if (seconds <= 0)
-        return "ещё не запускалась";
+        return tr("never");
     auto now = static_cast<std::int64_t>(std::time(nullptr));
     auto delta = now - seconds;
     if (delta < 0)
         return dateText(seconds);
     if (delta < 90)
-        return "только что";
+        return tr("just now");
     if (delta < 3600)
-        return plural(delta / 60, "минуту", "минуты", "минут") + " назад";
+        return trf("{0} ago", {countText(delta / 60, "minute", "minutes", "минуту", "минуты", "минут")});
     if (delta < 86400)
-        return plural(delta / 3600, "час", "часа", "часов") + " назад";
+        return trf("{0} ago", {countText(delta / 3600, "hour", "hours", "час", "часа", "часов")});
     if (delta < 2 * 86400)
-        return "вчера";
+        return tr("yesterday");
     if (delta < 30 * 86400)
-        return plural(delta / 86400, "день", "дня", "дней") + " назад";
+        return trf("{0} ago", {countText(delta / 86400, "day", "days", "день", "дня", "дней")});
     return dateText(seconds);
 }
 std::string loaderText(LoaderKind kind) {
@@ -93,7 +91,7 @@ std::string loaderText(LoaderKind kind) {
     case LoaderKind::Quilt: return "Quilt";
     case LoaderKind::Forge: return "Forge";
     case LoaderKind::NeoForge: return "NeoForge";
-    default: return "Неизвестный загрузчик";
+    default: return tr("Unknown loader");
     }
 }
 std::string gameText(const GameSpec &game) {
@@ -104,11 +102,11 @@ std::string gameText(const GameSpec &game) {
 }
 std::string stateText(InstanceState state) {
     switch (state) {
-    case InstanceState::Ready: return "Готова";
-    case InstanceState::NeedsFiles: return "Нужны файлы";
-    case InstanceState::NeedsPreparation: return "Нужна подготовка";
-    case InstanceState::Unsupported: return "Несовместима";
-    default: return "Ошибка сборки";
+    case InstanceState::Ready: return tr("Ready");
+    case InstanceState::NeedsFiles: return tr("Needs files");
+    case InstanceState::NeedsPreparation: return tr("Needs preparation");
+    case InstanceState::Unsupported: return tr("Incompatible");
+    default: return tr("Broken");
     }
 }
 Color stateColor(InstanceState state) {
@@ -119,36 +117,37 @@ Color stateColor(InstanceState state) {
 }
 std::string modeText(int mode, bool hardcore) {
     if (hardcore)
-        return "Хардкор";
+        return tr("Hardcore");
     switch (mode) {
-    case 1: return "Творчество";
-    case 2: return "Приключение";
-    case 3: return "Наблюдение";
-    default: return "Выживание";
+    case 1: return tr("Creative");
+    case 2: return tr("Adventure");
+    case 3: return tr("Spectator");
+    default: return tr("Survival");
     }
 }
 std::string kindTitle(ContentKind kind) {
     switch (kind) {
-    case ContentKind::Mod: return "Моды";
-    case ContentKind::ResourcePack: return "Ресурспаки";
-    case ContentKind::ShaderPack: return "Шейдеры";
-    default: return "Сборки";
+    case ContentKind::Mod: return tr("Mods");
+    case ContentKind::ResourcePack: return tr("Resource packs");
+    case ContentKind::ShaderPack: return tr("Shaders");
+    default: return tr("Modpacks");
     }
 }
 std::string errorText(const std::string &code, const std::string &detail) {
     if (code == "catalog.cf_key_missing" || code == "catalog.cf_key_unavailable")
-        return "CurseForge сейчас недоступен. Можно указать свой ключ API в настройках.";
+        return tr("CurseForge is unavailable right now. You can set your own API key in Settings.");
     if (code == "http_tls")
-        return "Не удалось установить защищённое соединение. Проверь дату, время и подключение Switch. После изменения часов перезапусти лаунчер.";
+        return tr("Could not establish a secure connection. Check the Switch date, time and network. Restart the launcher after changing the clock.");
     if (code == "cancelled" || code == "catalog.cancelled")
-        return "Операция отменена. Установленные сборки сохранены.";
+        return tr("Operation cancelled. Installed instances are kept.");
     if (code == "disk_space")
-        return "На SD-карте недостаточно свободного места.";
+        return tr("Not enough free space on the SD card.");
     if (code == "catalog.rate_limited")
-        return "Каталог временно ограничил число запросов. Повтори позже.";
+        return tr("The catalog is limiting requests right now. Try again later.");
     if (code.compare(0, 4, "http") == 0)
-        return "Нет связи с сервером. Проверь подключение к интернету. [" + code + "]";
-    return detail + (code.empty() ? "" : " [" + code + "]");
+        return trf("No connection to the server. Check your internet connection. [{0}]", {code});
+    // Backend messages are English; tr() finds the exact ones.
+    return tr(detail) + (code.empty() ? "" : " [" + code + "]");
 }
 bool usernameValid(const std::string &name) {
     return !name.empty() && name.size() <= 16 &&
@@ -163,7 +162,14 @@ bool quickPlaySupported(const std::string &version) {
     return std::atoi(version.c_str()) >= 23;
 }
 const Color icon_colors[] = {accent, info, {199, 168, 228}, {237, 191, 121}, {240, 128, 128}, {120, 214, 214}, {226, 226, 140}, {180, 180, 200}};
-const char *icon_names[] = {"Мятная", "Голубая", "Сиреневая", "Янтарная", "Коралловая", "Бирюзовая", "Лимонная", "Серая"};
+const char *icon_names[] = {"Mint", "Blue", "Lilac", "Amber", "Coral", "Turquoise", "Lemon", "Gray"};
+// Log names from listLogs() carry an English prefix for crash and preparation logs.
+std::string logName(const std::string &name) {
+    for (std::string prefix : {"Crash · ", "Preparation · "})
+        if (name.compare(0, prefix.size(), prefix) == 0)
+            return tr(prefix) + name.substr(prefix.size());
+    return name;
+}
 
 // Background work returns a closure that applies its result on the UI thread.
 using Apply = std::function<void()>;
@@ -189,7 +195,7 @@ class Job {
     mutable std::mutex mutex_;
     Progress progress_;
     Apply result_;
-    std::string error_;
+    std::string error_, error_code_;
     std::atomic_bool done_{false};
 
   public:
@@ -202,13 +208,14 @@ class Job {
     }
     void start(const std::string &label, Work work) {
         if (active)
-            throw Error("job_active", "Дождись завершения текущей задачи");
+            throw Error("job_active", "Wait for the current task to finish");
         join();
         {
             std::lock_guard<std::mutex> lock(mutex_);
             progress_ = {};
             result_ = {};
             error_.clear();
+            error_code_.clear();
         }
         title = label;
         cancelled = false;
@@ -230,12 +237,13 @@ class Job {
                     std::fprintf(stderr, "MINESWITCH_JOB_ERROR %s [%s] %s\n", title.c_str(), e.code.c_str(), e.what());
                     std::lock_guard<std::mutex> lock(mutex_);
                     error_ = errorText(e.code, e.what());
+                    error_code_ = e.code;
                 } catch (const std::exception &e) {
                     std::lock_guard<std::mutex> lock(mutex_);
-                    error_ = e.what();
+                    error_ = tr(e.what());
                 } catch (...) {
                     std::lock_guard<std::mutex> lock(mutex_);
-                    error_ = "Не удалось завершить задачу";
+                    error_ = tr("Could not finish the task");
                 }
                 done_.store(true, std::memory_order_release);
             };
@@ -247,11 +255,11 @@ class Job {
             };
             Result result = threadCreate(&worker_, entry, task.get(), nullptr, 1024 * 1024, 0x3B, -2);
             if (R_FAILED(result))
-                throw Error("worker", "Не удалось создать фоновую задачу");
+                throw Error("worker", "Could not create a background task");
             result = threadStart(&worker_);
             if (R_FAILED(result)) {
                 threadClose(&worker_);
-                throw Error("worker", "Не удалось запустить фоновую задачу");
+                throw Error("worker", "Could not start a background task");
             }
             task.release();
             joinable_ = true;
@@ -267,7 +275,7 @@ class Job {
         std::lock_guard<std::mutex> lock(mutex_);
         return progress_;
     }
-    bool take(Apply &result, std::string &error) {
+    bool take(Apply &result, std::string &error, std::string &code) {
         if (!active || !done_.load(std::memory_order_acquire))
             return false;
         join();
@@ -275,6 +283,7 @@ class Job {
         std::lock_guard<std::mutex> lock(mutex_);
         result = std::move(result_);
         error = error_;
+        code = error_code_;
         return true;
     }
 };
@@ -282,7 +291,7 @@ class Job {
 enum class Page { Library, Catalog, Files, Tasks, Settings };
 enum class Tab { Overview, Mods, ResourcePacks, ShaderPacks, Worlds, Servers, Screenshots, Logs, Settings };
 constexpr int tab_count = 9;
-const char *tab_names[tab_count] = {"Обзор", "Моды", "Ресурспаки", "Шейдеры", "Миры", "Серверы", "Скриншоты", "Логи", "Настройки"};
+const char *tab_names[tab_count] = {"Overview", "Mods", "Resource packs", "Shaders", "Worlds", "Servers", "Screenshots", "Logs", "Settings"};
 ContentKind tabKind(Tab tab) {
     return tab == Tab::ResourcePacks ? ContentKind::ResourcePack : tab == Tab::ShaderPacks ? ContentKind::ShaderPack : ContentKind::Mod;
 }
@@ -470,7 +479,7 @@ class Application {
 #ifdef __SWITCH__
         SwkbdConfig keyboard{};
         if (R_FAILED(swkbdCreate(&keyboard, 0)))
-            throw Error("keyboard", "Не удалось открыть клавиатуру");
+            throw Error("keyboard", "Could not open the keyboard");
         if (secret)
             swkbdConfigMakePresetPassword(&keyboard);
         else
@@ -515,16 +524,16 @@ class Application {
         focus_ = modal_saved_focus_;
     }
     void confirm(const std::string &title, const std::string &text, const std::string &yes, std::function<void()> call) {
-        openMenu(title, text, {{yes, std::move(call), true}, {"Отмена", [] {}}});
+        openMenu(title, text, {{yes, std::move(call), true}, {tr("Cancel"), [] {}}});
     }
     // Heavy work: installs, preparation, copies. Visible on the Tasks page.
     bool task(const std::string &label, Work work) {
         if (preview_) {
-            toast("Это предпросмотр интерфейса. Запусти без --preview для работы с файлами.", warning);
+            toast(tr("This is a UI preview. Run without --preview to work with files."), warning);
             return false;
         }
         if (task_.active) {
-            toast("Дождись завершения задачи «" + task_.title + "»", warning);
+            toast(trf("Wait for \"{0}\" to finish", {task_.title}), warning);
             return false;
         }
         // A completed preparation and a queued user action can share a frame.
@@ -565,7 +574,7 @@ class Application {
         }
         b.loading = true;
         b.searched = true;
-        query(q.kind == ContentKind::Modpack ? "Поиск сборок" : "Поиск: " + kindTitle(q.kind),
+        query(q.kind == ContentKind::Modpack ? "Modpack search" : "Search: " + kindTitle(q.kind),
               [this, settings, provider, q, epoch, target, more](ProgressCallback, const std::atomic_bool *stop) -> Apply {
                   CatalogClient catalog(http_, settings);
                   auto page = catalog.search(provider, q, stop);
@@ -595,7 +604,7 @@ class Application {
         auto loader = b.kind == ContentKind::Mod && detail_ ? detail_->game.loader.kind : LoaderKind::Unknown;
         auto kind = b.kind;
         focus_ = -1;
-        query("Версии: " + project.name,
+        query("Versions: " + project.name,
               [this, settings, project, filter, kind, loader, epoch, target](ProgressCallback, const std::atomic_bool *stop) -> Apply {
                   CatalogClient catalog(http_, settings);
                   auto list = catalog.versions(project.provider, project.id, filter, stop, kind, loader);
@@ -615,7 +624,7 @@ class Application {
         auto settings = settings_;
         auto kind = content_browse_.kind;
         auto name = content_browse_.project ? content_browse_.project->name : version.name;
-        task("Установка: " + name, [this, item, settings, version, kind, name](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
+        task(trf("Installing: {0}", {name}), [this, item, settings, version, kind, name](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
             CatalogClient catalog(http_, settings);
             auto exact = catalog.version(version.provider, version.project_id, version.id, stop, kind);
             std::vector<std::string> installed;
@@ -630,11 +639,12 @@ class Application {
             copy.installed_bytes += exact.archive.bytes;
             storage_.saveInstance(copy);
             return [this, name, installed, id = item.id] {
-                auto text = "Установлено: " + name;
-                if (installed.size() > 1)
-                    text += " и " + plural(static_cast<long>(installed.size() - 1), "зависимость", "зависимости", "зависимостей");
+                auto text = installed.size() > 1
+                                ? trf("Installed: {0} and {1}", {name, countText(static_cast<long>(installed.size() - 1), "dependency", "dependencies",
+                                                                                 "зависимость", "зависимости", "зависимостей")})
+                                : trf("Installed: {0}", {name});
                 toast(text);
-                remember("Установка: " + name, text, true);
+                remember(trf("Installing: {0}", {name}), text, true);
                 refresh();
                 if (detail_ && detail_->id == id)
                     loadTab();
@@ -642,7 +652,7 @@ class Application {
         });
     }
     void inspect(const std::string &path) {
-        task("Проверка архива", [this, path](ProgressCallback, const std::atomic_bool *stop) -> Apply {
+        task(tr("Checking archive"), [this, path](ProgressCallback, const std::atomic_bool *stop) -> Apply {
             ArchiveImporter importer(storage_, http_, parse_pack_manifest);
             auto plan = importer.inspectArchive(path, stop);
             return [this, plan, path] {
@@ -656,7 +666,7 @@ class Application {
     void downloadPack(const CatalogVersion &version) {
         auto settings = settings_;
         auto icon = packs_browse_.project ? packs_browse_.project->icon_url : std::string();
-        task("Загрузка сборки", [this, settings, version, icon](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
+        task(tr("Downloading modpack"), [this, settings, version, icon](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
             CatalogClient catalog(http_, settings);
             auto exact = catalog.version(version.provider, version.project_id, version.id, stop);
             auto folder = joinPath(storage_.root(), "cache/pack-archives");
@@ -683,7 +693,7 @@ class Application {
         auto path = archive_;
         auto icon = inspected_icon_;
         bool optional = include_optional_;
-        if (task("Установка сборки",
+        if (task(tr("Installing modpack"),
                  [this, settings, path, optional, icon](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
                      CatalogClient catalog(http_, settings);
                      ArchiveImporter importer(storage_, http_, parse_pack_manifest,
@@ -706,7 +716,7 @@ class Application {
                      }
                      std::string packwiz_error;
                      if (!instance.packwiz_url.empty()) {
-                         // A failed first sync is retried by «Играть», which needs it to succeed.
+                         // A failed first sync is retried by "Play", which needs it to succeed.
                          try {
                              syncPackwiz(storage_, http_, settings, instance, true, progress, stop);
                          } catch (const Error &e) {
@@ -720,10 +730,10 @@ class Application {
                          refresh();
                          openInstance(instance);
                          if (packwiz_error.empty())
-                             toast("Сборка «" + instance.name + "» установлена");
+                             toast(trf("Installed \"{0}\"", {instance.name}));
                          else
-                             toast("Сборка создана, но моды packwiz не скачаны: " + packwiz_error, danger);
-                         remember("Установка сборки", instance.name, packwiz_error.empty());
+                             toast(trf("Instance created, but packwiz mods were not downloaded: {0}", {tr(packwiz_error)}), danger);
+                         remember(tr("Installing modpack"), instance.name, packwiz_error.empty());
                      };
                  })) {
             inspected_.reset();
@@ -773,7 +783,7 @@ class Application {
             return;
         }
         tab_loading_ = true;
-        query("Чтение сборки", [this, item, tab, epoch](ProgressCallback, const std::atomic_bool *) -> Apply {
+        query("Reading instance", [this, item, tab, epoch](ProgressCallback, const std::atomic_bool *) -> Apply {
             std::vector<InstalledMod> mods;
             std::vector<PackEntry> packs;
             std::vector<WorldInfo> worlds;
@@ -828,7 +838,7 @@ class Application {
     void prepare(Instance instance, bool force_validation = false, std::vector<std::string> extra = {}) {
 #ifdef __SWITCH__
         if (appletGetAppletType() != AppletType_Application && appletGetAppletType() != AppletType_SystemApplication)
-            throw Error("applet_memory", "Для запуска Minecraft открой лаунчер через игру, удерживая R.");
+            throw Error("applet_memory", "To run Minecraft, open the launcher through a game while holding R.");
         if (R_SUCCEEDED(timeInitialize())) {
             u64 system_seconds = 0;
             Result clock_result = timeGetCurrentTime(TimeType_UserSystemClock, &system_seconds);
@@ -836,7 +846,7 @@ class Application {
             auto process_seconds = std::time(nullptr);
             if (R_SUCCEEDED(clock_result) && process_seconds >= 0 &&
                 std::llabs(static_cast<long long>(system_seconds) - static_cast<long long>(process_seconds)) > 120)
-                throw Error("clock_restart", "Время консоли изменилось после запуска. Закрой MineSwitch и открой его снова перед запуском игры.");
+                throw Error("clock_restart", "The console time changed after launch. Close MineSwitch and open it again before starting the game.");
         }
 #endif
         auto settings = settings_;
@@ -846,14 +856,14 @@ class Application {
         settings.jvm_args = settings_.jvm_args + " " + instance.jvm_args;
         parseJvmArguments(settings.jvm_args);
         auto user = profile();
-        bool started = task(force_validation ? "Полная проверка: " + instance.name : "Подготовка: " + instance.name,
+        bool started = task(force_validation ? trf("Full check: {0}", {instance.name}) : trf("Preparing: {0}", {instance.name}),
                             [this, settings, user, instance, force_validation, extra](ProgressCallback progress,
                                                                                       const std::atomic_bool *stop) mutable -> Apply {
                                 const auto started = SDL_GetTicks();
 #ifdef __SWITCH__
-                                progress({"runtime", "Проверка Java 21 на SD-карте", 0, 0, 0, 0});
+                                progress({"runtime", "Checking Java 21 on the SD card", 0, 0, 0, 0});
                                 if (!mineswitch_prepare_runtime())
-                                    throw Error("runtime_install", "Не удалось установить Java 21 на SD-карту");
+                                    throw Error("runtime_install", "Could not install Java 21 on the SD card");
                                 if (stop && stop->load())
                                     throw Error("cancelled", "Operation cancelled");
 #endif
@@ -892,8 +902,8 @@ class Application {
     void prepared(Instance instance, LaunchPlan launch, bool force_validation) {
         refresh();
         if (force_validation) {
-            toast(launch.preparation_only ? "Ресурсы проверены. Для загрузчика выбери «Играть»." : "Ресурсы Minecraft проверены.");
-            remember("Полная проверка", instance.name, true);
+            toast(tr(launch.preparation_only ? "Resources verified. Choose \"Play\" to set up the loader." : "Minecraft resources verified."));
+            remember(tr("Full check"), instance.name, true);
             if (page_ == Page::Tasks)
                 page_ = Page::Library;
             return;
@@ -919,8 +929,8 @@ class Application {
         pending_launch_ = std::move(launch);
 #else
         (void)instance;
-        toast("Подготовка завершена. Запуск игры доступен в сборке для Switch.", info);
-        remember("Подготовка", instance.name, true);
+        toast(tr("Preparation finished. The game can only be launched in the Switch build."), info);
+        remember(tr("Preparation"), instance.name, true);
         page_ = Page::Library;
 #endif
     }
@@ -928,7 +938,7 @@ class Application {
         if (instance.state == InstanceState::NeedsFiles)
             return verifyFiles(instance);
         if (instance.state == InstanceState::Unsupported || instance.state == InstanceState::Broken)
-            return toast(instance.reason.empty() ? "Эта сборка несовместима" : instance.reason, danger);
+            return toast(tr(instance.reason.empty() ? "This instance is incompatible" : instance.reason), danger);
         prepare(instance, false, std::move(extra));
     }
     void syncPack(Instance instance) {
@@ -939,9 +949,9 @@ class Application {
                     refresh();
                     if (detail_ && detail_->id == instance.id)
                         detail_ = instance;
-                    auto text = "Версия " + (result.version.empty() ? std::string("—") : result.version) + ": скачано " +
-                                std::to_string(result.downloaded) + ", удалено " + std::to_string(result.removed) +
-                                ", без изменений " + std::to_string(result.kept);
+                    auto text = trf("Version {0}: {1} downloaded, {2} removed, {3} unchanged",
+                                    {result.version.empty() ? std::string("—") : result.version, std::to_string(result.downloaded),
+                                     std::to_string(result.removed), std::to_string(result.kept)});
                     toast(text);
                     remember("packwiz: " + instance.name, text, true);
                 };
@@ -951,11 +961,11 @@ class Application {
         }
     }
     void verifyFiles(Instance instance) {
-        if (task("Проверка файлов: " + instance.name, [this, instance](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
+        if (task(trf("Checking files: {0}", {instance.name}), [this, instance](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
                 auto result = verifyManualFiles(storage_, instance, progress, stop);
                 return [this, result] {
                     refresh();
-                    toast(result.state == InstanceState::NeedsFiles ? "Ещё не все файлы на месте" : "Файлы сборки проверены",
+                    toast(tr(result.state == InstanceState::NeedsFiles ? "Some files are still missing" : "Instance files verified"),
                           result.state == InstanceState::NeedsFiles ? warning : accent);
                 };
             }))
@@ -963,15 +973,15 @@ class Application {
     }
     void instanceMenu(const Instance &item) {
         openMenu(item.name, gameText(item.game),
-                 {{item.state == InstanceState::Ready ? "Играть" : "Подготовить и играть", [this, item] { play(item); }},
-                  {"Открыть", [this, item] { openInstance(item); }},
-                  {"Переименовать", [this, item] { renameInstance(item); }},
-                  {"Копировать", [this, item] { duplicate(item); }},
-                  {"Экспорт (ZIP для PolyMC)", [this, item] { exportZip(item); }},
-                  {"Удалить", [this, item] { removeInstance(item); }, true}});
+                 {{tr(item.state == InstanceState::Ready ? "Play" : "Prepare and play"), [this, item] { play(item); }},
+                  {tr("Open"), [this, item] { openInstance(item); }},
+                  {tr("Rename"), [this, item] { renameInstance(item); }},
+                  {tr("Copy"), [this, item] { duplicate(item); }},
+                  {tr("Export (ZIP for PolyMC)"), [this, item] { exportZip(item); }},
+                  {tr("Delete"), [this, item] { removeInstance(item); }, true}});
     }
     void renameInstance(Instance item) {
-        edit("Название сборки", item.name, 120, [this, item](std::string name) mutable {
+        edit(tr("Instance name"), item.name, 120, [this, item](std::string name) mutable {
             if (name.empty())
                 return;
             item.name = std::move(name);
@@ -982,40 +992,40 @@ class Application {
         });
     }
     void duplicate(const Instance &item) {
-        edit("Название копии", item.name + " (копия)", 120, [this, item](std::string name) {
+        edit(tr("Copy name"), item.name + tr(" (copy)"), 120, [this, item](std::string name) {
             if (name.empty())
                 return;
-            task("Копирование: " + item.name, [this, item, name](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
+            task(trf("Copying: {0}", {item.name}), [this, item, name](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
                 auto copy = duplicateInstance(storage_, item, name, progress, stop);
                 return [this, copy] {
                     refresh();
-                    toast("Создана копия «" + copy.name + "»");
-                    remember("Копирование сборки", copy.name, true);
+                    toast(trf("Created copy \"{0}\"", {copy.name}));
+                    remember(tr("Copying instance"), copy.name, true);
                 };
             });
         });
     }
     void removeInstance(const Instance &item) {
-        confirm("Удалить сборку?", "«" + item.name + "» будет удалена с SD-карты вместе с мирами, модами и настройками. Это нельзя отменить.",
-                "Удалить навсегда", [this, item] {
-                    task("Удаление: " + item.name, [this, item](ProgressCallback, const std::atomic_bool *) -> Apply {
+        confirm(tr("Delete instance?"), trf("\"{0}\" will be deleted from the SD card with its worlds, mods and settings. This cannot be undone.", {item.name}),
+                tr("Delete forever"), [this, item] {
+                    task(trf("Deleting: {0}", {item.name}), [this, item](ProgressCallback, const std::atomic_bool *) -> Apply {
                         deleteInstance(storage_, item);
                         return [this, item] {
                             if (detail_ && detail_->id == item.id)
                                 closeDetail();
                             refresh();
-                            toast("Сборка «" + item.name + "» удалена");
-                            remember("Удаление сборки", item.name, true);
+                            toast(trf("Deleted \"{0}\"", {item.name}));
+                            remember(tr("Deleting instance"), item.name, true);
                         };
                     });
                 });
     }
     void exportZip(const Instance &item) {
-        if (task("Экспорт: " + item.name, [this, item](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
+        if (task(trf("Export: {0}", {item.name}), [this, item](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
                 auto path = exportInstance(storage_, item, progress, stop);
                 return [this, path, item] {
-                    toast("Экспорт готов: " + path);
-                    remember("Экспорт: " + item.name, path, true);
+                    toast(trf("Export ready: {0}", {path}));
+                    remember(trf("Export: {0}", {item.name}), path, true);
                     refresh();
                 };
             }))
@@ -1024,24 +1034,24 @@ class Application {
     void chooseIcon(const Instance &item) {
         std::vector<MenuItem> items;
         if (pathExists(joinPath(item.root, "icon.png")))
-            items.push_back({"Картинка сборки", [this, item = Instance(item)]() mutable {
+            items.push_back({tr("Instance picture"), [this, item = Instance(item)]() mutable {
                                  item.icon = "file";
                                  saveDetail(item);
                              }});
         for (int i = 0; i < 8; ++i)
-            items.push_back({icon_names[i], [this, item = Instance(item), i]() mutable {
+            items.push_back({tr(icon_names[i]), [this, item = Instance(item), i]() mutable {
                                  item.icon = "preset:" + std::to_string(i);
                                  saveDetail(item);
                              }});
-        openMenu("Иконка сборки", "", std::move(items));
+        openMenu(tr("Instance icon"), "", std::move(items));
     }
     std::vector<MenuItem> heapChoices(int current, bool allow_default, std::function<void(int)> apply) {
         std::vector<MenuItem> items;
         if (allow_default)
-            items.push_back({"По умолчанию (" + std::to_string(settings_.heap_mib) + " МБ)" + (current == 0 ? " · выбрано" : ""),
+            items.push_back({trf("Default ({0} MB)", {std::to_string(settings_.heap_mib)}) + (current == 0 ? tr(" · selected") : ""),
                              [apply] { apply(0); }});
         for (int size = 512; size <= heap_budget_.max_mib; size = nextHeapOption(size, heap_budget_.max_mib)) {
-            items.push_back({std::to_string(size) + " МБ" + (current == size ? " · выбрано" : ""), [apply, size] { apply(size); }});
+            items.push_back({mibText(size) + (current == size ? tr(" · selected") : ""), [apply, size] { apply(size); }});
             if (size == heap_budget_.max_mib)
                 break;
         }
@@ -1064,7 +1074,7 @@ class Application {
             for (const auto &pack : packs_)
                 if (!pack.directory)
                     names.push_back(pack.filename);
-        task("Проверка обновлений: " + kindTitle(kind),
+        task(trf("Checking updates: {0}", {kindTitle(kind)}),
              [this, item, settings, kind, epoch, names](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
                  auto folder = joinPath(instanceRoot(storage_, item), std::string("game/") + contentFolder(kind));
                  std::map<std::string, LocalFile> files;
@@ -1078,7 +1088,7 @@ class Application {
                              throw;
                      }
                  }
-                 progress({"catalog", "Поиск в Modrinth и CurseForge", 0, 0, done, done});
+                 progress({"catalog", "Searching Modrinth and CurseForge", 0, 0, done, done});
                  CatalogClient catalog(http_, settings);
                  auto known = catalog.identify(files, kind, stop);
                  auto newer = catalog.updates(known, files, kind, item.game.minecraft_version, item.game.loader.kind, stop);
@@ -1087,8 +1097,8 @@ class Application {
                          return;
                      updates_ = newer;
                      updates_checked_ = true;
-                     toast(newer.empty() ? "Всё актуально · распознано " + std::to_string(known.size())
-                                         : "Доступно обновлений: " + std::to_string(newer.size()),
+                     toast(newer.empty() ? trf("Everything is up to date · {0} recognized", {std::to_string(known.size())})
+                                         : trf("Updates available: {0}", {std::to_string(newer.size())}),
                            newer.empty() ? accent : info);
                  };
              });
@@ -1099,7 +1109,8 @@ class Application {
         auto item = *detail_;
         auto settings = settings_;
         auto kind = tabKind(tab_);
-        task(list.size() == 1 ? "Обновление: " + list.front().first : "Обновление: " + plural(static_cast<long>(list.size()), "файл", "файла", "файлов"),
+        task(trf("Updating: {0}", {list.size() == 1 ? list.front().first
+                                                    : countText(static_cast<long>(list.size()), "file", "files", "файл", "файла", "файлов")}),
              [this, item, settings, kind, list](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
                  CatalogClient catalog(http_, settings);
                  ModManager manager(storage_, http_);
@@ -1118,51 +1129,51 @@ class Application {
                      } catch (const Error &error) {
                          if (error.code == "cancelled")
                              throw;
-                         failed.push_back(entry.first + ": " + error.what());
+                         failed.push_back(entry.first + ": " + tr(error.what()));
                      }
                      ++done;
                  }
                  return [this, failed, done] {
                      if (failed.empty())
-                         toast("Обновлено: " + std::to_string(done));
+                         toast(trf("Updated: {0}", {std::to_string(done)}));
                      else
-                         toast("Не удалось обновить: " + failed.front(), danger);
-                     remember("Обновление", failed.empty() ? "Успешно" : failed.front(), failed.empty());
+                         toast(trf("Could not update: {0}", {failed.front()}), danger);
+                     remember(tr("Update"), failed.empty() ? tr("Success") : failed.front(), failed.empty());
                      loadTab();
                  };
              });
     }
     void modMenu(const InstalledMod &mod) {
         auto item = *detail_;
-        std::vector<MenuItem> items{{mod.enabled ? "Отключить" : "Включить", [this, item, mod] { toggleMod(mod); }}};
+        std::vector<MenuItem> items{{tr(mod.enabled ? "Disable" : "Enable"), [this, item, mod] { toggleMod(mod); }}};
         auto update = updates_.find(mod.filename);
         if (update != updates_.end())
-            items.push_back({"Обновить до " + update->second.name, [this, mod, update] { updateContent({{mod.filename, update->second}}); }});
-        items.push_back({"Удалить", [this, item, mod] {
-                             confirm("Удалить мод?", mod.name + " (" + mod.filename + ")", "Удалить", [this, item, mod] {
-                                 local("Удаление мода", [this, item, mod] { ModManager(storage_, http_).remove(item, mod.filename); },
-                                       "Мод удалён");
+            items.push_back({trf("Update to {0}", {update->second.name}), [this, mod, update] { updateContent({{mod.filename, update->second}}); }});
+        items.push_back({tr("Delete"), [this, item, mod] {
+                             confirm(tr("Delete mod?"), mod.name + " (" + mod.filename + ")", tr("Delete"), [this, item, mod] {
+                                 local("Deleting mod", [this, item, mod] { ModManager(storage_, http_).remove(item, mod.filename); },
+                                       tr("Mod deleted"));
                              });
                          },
                          true});
-        openMenu(mod.name, mod.problem.empty() ? mod.version + " · " + mod.filename : mod.problem, std::move(items));
+        openMenu(mod.name, mod.problem.empty() ? mod.version + " · " + mod.filename : tr(mod.problem), std::move(items));
     }
     void toggleMod(const InstalledMod &mod) {
         auto item = *detail_;
-        local(mod.enabled ? "Отключение мода" : "Включение мода",
+        local(mod.enabled ? "Disabling mod" : "Enabling mod",
               [this, item, mod] { ModManager(storage_, http_).setEnabled(item, mod.filename, !mod.enabled); });
     }
     void packMenu(const PackEntry &pack, ContentKind kind) {
         auto item = *detail_;
-        std::vector<MenuItem> items{{pack.enabled ? "Отключить" : "Включить", [this, item, pack, kind] {
-                                         local("Переключение", [this, item, pack, kind] { setPackEnabled(storage_, item, kind, pack.filename, !pack.enabled); });
+        std::vector<MenuItem> items{{tr(pack.enabled ? "Disable" : "Enable"), [this, item, pack, kind] {
+                                         local("Toggling pack", [this, item, pack, kind] { setPackEnabled(storage_, item, kind, pack.filename, !pack.enabled); });
                                      }}};
         auto update = updates_.find(pack.filename);
         if (update != updates_.end())
-            items.push_back({"Обновить до " + update->second.name, [this, pack, update] { updateContent({{pack.filename, update->second}}); }});
-        items.push_back({"Удалить", [this, item, pack, kind] {
-                             confirm("Удалить?", pack.name, "Удалить", [this, item, pack, kind] {
-                                 local("Удаление", [this, item, pack, kind] { removeContent(storage_, item, kind, pack.filename); }, "Удалено");
+            items.push_back({trf("Update to {0}", {update->second.name}), [this, pack, update] { updateContent({{pack.filename, update->second}}); }});
+        items.push_back({tr("Delete"), [this, item, pack, kind] {
+                             confirm(tr("Delete?"), pack.name, tr("Delete"), [this, item, pack, kind] {
+                                 local("Deleting pack", [this, item, pack, kind] { removeContent(storage_, item, kind, pack.filename); }, tr("Deleted"));
                              });
                          },
                          true});
@@ -1172,56 +1183,56 @@ class Application {
         auto item = *detail_;
         std::vector<MenuItem> items;
         if (quickPlaySupported(item.game.minecraft_version))
-            items.push_back({"Играть в этот мир", [this, item, world] { play(item, {"--quickPlaySingleplayer", world.folder}); }});
-        items.push_back({"Переименовать", [this, item, world] {
-                             edit("Название мира", world.name, 128, [this, item, world](std::string name) {
+            items.push_back({tr("Play this world"), [this, item, world] { play(item, {"--quickPlaySingleplayer", world.folder}); }});
+        items.push_back({tr("Rename"), [this, item, world] {
+                             edit(tr("World name"), world.name, 128, [this, item, world](std::string name) {
                                  if (!name.empty())
-                                     local("Переименование мира", [this, item, world, name] { renameWorld(storage_, item, world.folder, name); },
-                                           "Мир переименован");
+                                     local("Renaming world", [this, item, world, name] { renameWorld(storage_, item, world.folder, name); },
+                                           tr("World renamed"));
                              });
                          }});
-        items.push_back({"Резервная копия (ZIP)", [this, item, world] {
-                             task("Резервная копия: " + world.name, [this, item, world](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
+        items.push_back({tr("Backup (ZIP)"), [this, item, world] {
+                             task(trf("Backup: {0}", {world.name}), [this, item, world](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
                                  auto path = backupWorld(storage_, item, world.folder, progress, stop);
                                  return [this, path] {
-                                     toast("Копия сохранена: " + path.substr(path.find_last_of('/') + 1));
-                                     remember("Резервная копия мира", path, true);
+                                     toast(trf("Backup saved: {0}", {path.substr(path.find_last_of('/') + 1)}));
+                                     remember(tr("World backup"), path, true);
                                      refresh();
                                  };
                              });
                          }});
-        items.push_back({"Создать копию мира", [this, item, world] {
-                             task("Копирование мира: " + world.name, [this, item, world](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
+        items.push_back({tr("Copy world"), [this, item, world] {
+                             task(trf("Copying world: {0}", {world.name}), [this, item, world](ProgressCallback progress, const std::atomic_bool *stop) -> Apply {
                                  copyWorld(storage_, item, world.folder, progress, stop);
                                  return [this] {
-                                     toast("Копия мира создана");
+                                     toast(tr("World copy created"));
                                      refresh();
                                      loadTab();
                                  };
                              });
                          }});
-        items.push_back({"Удалить", [this, item, world] {
-                             confirm("Удалить мир?", "«" + world.name + "» будет удалён без возможности восстановления. Сначала можно сделать резервную копию.",
-                                     "Удалить навсегда", [this, item, world] {
-                                         local("Удаление мира", [this, item, world] { deleteWorld(storage_, item, world.folder); }, "Мир удалён");
+        items.push_back({tr("Delete"), [this, item, world] {
+                             confirm(tr("Delete world?"), trf("\"{0}\" will be deleted permanently. You can make a backup first.", {world.name}),
+                                     tr("Delete forever"), [this, item, world] {
+                                         local("Deleting world", [this, item, world] { deleteWorld(storage_, item, world.folder); }, tr("World deleted"));
                                      });
                          },
                          true});
-        openMenu(world.name, modeText(world.game_type, world.hardcore) + (world.version.empty() ? "" : " · " + world.version) + " · папка " + world.folder,
+        openMenu(world.name, modeText(world.game_type, world.hardcore) + (world.version.empty() ? "" : " · " + world.version) + " · " + trf("folder {0}", {world.folder}),
                  std::move(items));
     }
     void saveServerList(std::vector<ServerEntry> list, const std::string &done) {
         auto item = *detail_;
-        local("Сохранение серверов", [this, item, list] { saveServers(storage_, item, list); }, done);
+        local("Saving servers", [this, item, list] { saveServers(storage_, item, list); }, done);
     }
     void addServer() {
-        edit("Адрес сервера (host или host:port)", "", 255, [this](std::string address) {
+        edit(tr("Server address (host or host:port)"), "", 255, [this](std::string address) {
             if (address.empty())
                 return;
-            edit("Название сервера", "Minecraft Server", 64, [this, address](std::string name) {
+            edit(tr("Server name"), "Minecraft Server", 64, [this, address](std::string name) {
                 auto list = servers_;
                 list.push_back({name, address, -1});
-                saveServerList(list, "Сервер добавлен");
+                saveServerList(list, tr("Server added"));
             });
         });
     }
@@ -1229,7 +1240,7 @@ class Application {
         auto item = *detail_;
         auto server = servers_[index];
         std::vector<MenuItem> items;
-        items.push_back({"Подключиться", [this, item, server] {
+        items.push_back({tr("Connect"), [this, item, server] {
                              if (quickPlaySupported(item.game.minecraft_version))
                                  play(item, {"--quickPlayMultiplayer", server.address});
                              else {
@@ -1242,33 +1253,33 @@ class Application {
                                  play(item, {"--server", host, "--port", port});
                              }
                          }});
-        items.push_back({"Изменить адрес", [this, index, server] {
-                             edit("Адрес сервера", server.address, 255, [this, index](std::string value) {
+        items.push_back({tr("Change address"), [this, index, server] {
+                             edit(tr("Server address"), server.address, 255, [this, index](std::string value) {
                                  if (value.empty())
                                      return;
                                  auto list = servers_;
                                  list[index].address = value;
-                                 saveServerList(list, "Адрес изменён");
+                                 saveServerList(list, tr("Address changed"));
                              });
                          }});
-        items.push_back({"Изменить название", [this, index, server] {
-                             edit("Название сервера", server.name, 64, [this, index](std::string value) {
+        items.push_back({tr("Change name"), [this, index, server] {
+                             edit(tr("Server name"), server.name, 64, [this, index](std::string value) {
                                  auto list = servers_;
                                  list[index].name = value;
-                                 saveServerList(list, "Название изменено");
+                                 saveServerList(list, tr("Name changed"));
                              });
                          }});
         if (index > 0)
-            items.push_back({"Переместить выше", [this, index] {
+            items.push_back({tr("Move up"), [this, index] {
                                  auto list = servers_;
                                  std::swap(list[index], list[index - 1]);
                                  saveServerList(list, {});
                              }});
-        items.push_back({"Удалить", [this, index, server] {
-                             confirm("Удалить сервер?", server.name + " · " + server.address, "Удалить", [this, index] {
+        items.push_back({tr("Delete"), [this, index, server] {
+                             confirm(tr("Delete server?"), server.name + " · " + server.address, tr("Delete"), [this, index] {
                                  auto list = servers_;
                                  list.erase(list.begin() + index);
-                                 saveServerList(list, "Сервер удалён");
+                                 saveServerList(list, tr("Server deleted"));
                              });
                          },
                          true});
@@ -1277,9 +1288,9 @@ class Application {
     void deleteShot(int index) {
         auto item = *detail_;
         auto shot = shots_[index];
-        confirm("Удалить скриншот?", shot.name, "Удалить", [this, item, shot] {
+        confirm(tr("Delete screenshot?"), shot.name, tr("Delete"), [this, item, shot] {
             images_.forget(shot.path);
-            local("Удаление скриншота", [this, item, shot] { deleteScreenshot(storage_, item, shot.name); }, "Скриншот удалён");
+            local("Deleting screenshot", [this, item, shot] { deleteScreenshot(storage_, item, shot.name); }, tr("Screenshot deleted"));
             if (viewer_ && *viewer_ >= static_cast<int>(shots_.size()) - 1)
                 viewer_ = std::max(0, static_cast<int>(shots_.size()) - 2);
             if (shots_.size() <= 1)
@@ -1288,7 +1299,7 @@ class Application {
     }
     void openLog(const MediaFile &file) {
         auto item = *detail_;
-        query("Чтение журнала", [this, item, file](ProgressCallback, const std::atomic_bool *) -> Apply {
+        query("Reading log", [this, item, file](ProgressCallback, const std::atomic_bool *) -> Apply {
             auto lines = readLog(storage_, item, file.path);
             return [this, file, lines] {
                 log_ = LogView{file.name, lines, std::max(0, static_cast<int>(lines.size()) - 28), 0};
@@ -1318,7 +1329,7 @@ class Application {
         wizard_->versions_loading = true;
         wizard_->versions_error.clear();
         auto epoch = ++wizard_->epoch;
-        query("Список версий Minecraft", [this, epoch](ProgressCallback, const std::atomic_bool *stop) -> Apply {
+        query("Minecraft version list", [this, epoch](ProgressCallback, const std::atomic_bool *stop) -> Apply {
             std::vector<GameVersion> list;
             std::string error;
             try {
@@ -1355,7 +1366,7 @@ class Application {
         }
         wizard_->loader_loading = true;
         auto epoch = ++wizard_->epoch;
-        query("Версии " + loaderText(loader), [this, loader, minecraft, epoch](ProgressCallback, const std::atomic_bool *stop) -> Apply {
+        query("Versions: " + loaderText(loader), [this, loader, minecraft, epoch](ProgressCallback, const std::atomic_bool *stop) -> Apply {
             std::vector<LoaderVersion> list;
             std::string error;
             try {
@@ -1380,9 +1391,9 @@ class Application {
     void finishWizard() {
         auto &w = *wizard_;
         if (w.minecraft.empty())
-            return toast("Выбери версию Minecraft", warning);
+            return toast(tr("Choose a Minecraft version"), warning);
         if (w.loader != LoaderKind::Vanilla && w.loader_version.empty())
-            return toast("Выбери версию загрузчика", warning);
+            return toast(tr("Choose a loader version"), warning);
         if (w.editing) {
             auto item = w.target;
             bool changed = item.game.minecraft_version != w.minecraft;
@@ -1390,12 +1401,12 @@ class Application {
             item.game.loader = {w.loader, w.loader == LoaderKind::Vanilla ? "" : w.loader_version};
             if (item.state != InstanceState::NeedsFiles) {
                 item.state = InstanceState::NeedsPreparation;
-                item.reason = "Версия изменена: файлы будут подготовлены перед запуском";
+                item.reason = "Version changed: files will be prepared before launch";
             }
             saveDetail(item);
             wizard_.reset();
             focus_ = -1;
-            toast(changed ? "Версия изменена. Проверь совместимость модов." : "Загрузчик изменён");
+            toast(tr(changed ? "Version changed. Check mod compatibility." : "Loader changed"));
             return;
         }
         Instance instance;
@@ -1404,14 +1415,14 @@ class Application {
         instance.game.minecraft_version = w.minecraft;
         instance.game.loader = {w.loader, w.loader == LoaderKind::Vanilla ? "" : w.loader_version};
         instance.root = joinPath(storage_.root(), "instances/" + instance.id);
-        instance.reason = "Нужно скачать файлы Minecraft";
+        instance.reason = "Minecraft files need to be downloaded";
         instance.icon = "preset:" + std::to_string(std::rand() % 8);
         createDirectories(joinPath(instance.root, "game"));
         storage_.saveInstance(instance);
         wizard_.reset();
         refresh();
         openInstance(instance);
-        toast("Сборка создана");
+        toast(tr("Instance created"));
     }
 
     // -------------------------------------------------------------- widgets
@@ -1549,18 +1560,19 @@ class Application {
         draw_.box({48, 38, 9, 9}, background);
         draw_.box({40, 52, 11, 9}, background);
         draw_.text("MineSwitch", 76, 28, 26);
-        draw_.text(preview_ ? "ПРЕДПРОСМОТР" : "JAVA EDITION", 78, 64, 13, muted);
-        const char *labels[] = {"Сборки", "Каталог", "Импорт с SD", "Задачи", "Настройки"};
+        draw_.text(preview_ ? tr("PREVIEW") : "JAVA EDITION", 78, 64, 13, muted);
+        const char *pages[] = {"Library", "Catalog", "Import from SD", "Tasks", "Settings"};
         for (int i = 0; i < 5; ++i) {
             bool selected = static_cast<int>(page_) == i;
             SDL_Rect r{16, 112 + i * 58, 208, 48};
-            int index = addAction(r, [this, i] { changePage(static_cast<Page>(i)); }, true, labels[i]);
+            std::string text = tr(pages[i]);
+            int index = addAction(r, [this, i] { changePage(static_cast<Page>(i)); }, true, text);
             draw_.rounded(r, 10, selected ? raised : sidebar);
             if (selected)
                 draw_.rounded({16, r.y + 12, 4, 24}, 2, accent);
             if (focused(index))
                 draw_.roundedOutline({r.x - 2, r.y - 2, r.w + 4, r.h + 4}, 12, accent, 3);
-            draw_.text(labels[i], 36, r.y + 9, 20, selected ? foreground : muted);
+            draw_.text(text, 36, r.y + 9, 20, selected ? foreground : muted);
             if (i == 3 && (task_.active || !history_.empty()))
                 draw_.circle(200, r.y + 24, 5, task_.active ? accent : border);
         }
@@ -1568,7 +1580,7 @@ class Application {
             auto p = task_.progress();
             draw_.rounded({16, 432, 208, 74}, 10, panel);
             draw_.text(task_.title, 28, 438, 15, foreground, 186);
-            draw_.text(p.detail.empty() ? "Подожди…" : p.detail, 28, 460, 13, muted, 186);
+            draw_.text(tr(p.detail.empty() ? "Please wait…" : p.detail), 28, 460, 13, muted, 186);
             draw_.rounded({28, 488, 184, 6}, 3, border);
             double fraction = p.total ? std::min(1.0, p.completed / double(p.total))
                               : p.files_total ? std::min(1.0, p.files_done / double(p.files_total)) : -1;
@@ -1579,29 +1591,30 @@ class Application {
         }
         draw_.box({26, 538, 188, 1}, border);
         draw_.text(profile().username, 28, 552, 22, accent, 186);
-        draw_.text("Локальный профиль", 28, 586, 14, muted);
-        draw_.text("SD · свободно " + sizeText(free_bytes_), 28, 616, 14, muted);
+        draw_.text(tr("Local profile"), 28, 586, 14, muted);
+        draw_.text(trf("SD · {0} free", {sizeText(free_bytes_)}), 28, 616, 14, muted);
         content_start_ = static_cast<int>(actions_.size());
     }
     void library() {
-        header("Сборки", plural(static_cast<long>(instances_.size()), "сборка", "сборки", "сборок") + " · Minecraft Java Edition");
-        const char *sorts[] = {"По имени", "По последней игре", "По версии"};
-        button({760, 30, 216, 44}, sorts[settings_.library_sort], [this] {
+        header(tr("Library"), countText(static_cast<long>(instances_.size()), "instance", "instances", "сборка", "сборки", "сборок") +
+                                  " · Minecraft Java Edition");
+        const char *sorts[] = {"By name", "By last played", "By version"};
+        button({760, 30, 216, 44}, tr(sorts[settings_.library_sort]), [this] {
             settings_.library_sort = (settings_.library_sort + 1) % 3;
             if (!preview_)
                 storage_.saveSettings(settings_);
             sortInstances();
         });
-        button({990, 30, 120, 44}, "Импорт", [this] { changePage(Page::Files); });
-        button({1124, 30, 132, 44}, "+ Создать", [this] { openWizard(); }, true, false, true);
-        hint("A", "Открыть");
-        hint("X", "Действия");
-        hint("Y", "Играть");
+        button({990, 30, 120, 44}, tr("Import"), [this] { changePage(Page::Files); });
+        button({1124, 30, 132, 44}, tr("+ Create"), [this] { openWizard(); }, true, false, true);
+        hint("A", tr("Open"));
+        hint("X", tr("Actions"));
+        hint("Y", tr("Play"));
         if (instances_.empty()) {
-            empty({272, 112, 984, 540}, "Твоя библиотека начинается здесь",
-                  "Создай сборку с нужной версией Minecraft и загрузчиком, импортируй архив с SD-карты или найди готовую сборку в каталоге Modrinth и CurseForge.");
-            button({560, 480, 200, 52}, "+ Создать", [this] { openWizard(); }, true, false, true);
-            button({776, 480, 200, 52}, "Каталог", [this] { changePage(Page::Catalog); });
+            empty({272, 112, 984, 540}, tr("Your library starts here"),
+                  tr("Create an instance with the Minecraft version and loader you need, import an archive from the SD card or find a ready-made modpack in the Modrinth and CurseForge catalog."));
+            button({560, 480, 200, 52}, tr("+ Create"), [this] { openWizard(); }, true, false, true);
+            button({776, 480, 200, 52}, tr("Catalog"), [this] { changePage(Page::Catalog); });
             return;
         }
         grid("library", {272, 104, 984, 560}, static_cast<int>(instances_.size()), 3, 168, 16,
@@ -1612,7 +1625,7 @@ class Application {
                  draw_.text(item.name, r.x + 110, r.y + 18, 21, foreground, r.w - 128);
                  draw_.text(item.game.minecraft_version + " · " + loaderText(item.game.loader.kind), r.x + 110, r.y + 52, 17, muted, r.w - 128);
                  badge(r.x + 110, r.y + 82, stateText(item.state), stateColor(item.state), 14);
-                 draw_.text("Играли: " + agoText(item.last_played), r.x + 18, r.y + 124, 15, muted, r.w - 36);
+                 draw_.text(trf("Played: {0}", {agoText(item.last_played)}), r.x + 18, r.y + 124, 15, muted, r.w - 36);
              },
              [this](int i) { openInstance(instances_[i]); }, [this](int i) { return "instance:" + instances_[i].name; });
     }
@@ -1624,28 +1637,29 @@ class Application {
         draw_.text(gameText(item.game), 406, 78, 17, muted, 560);
         int x = 406;
         x += badge(x, 106, stateText(item.state), stateColor(item.state), 14) + 8;
-        x += badge(x, 106, std::to_string(std::min(effectiveHeap(item), heap_budget_.max_mib)) + " МБ", info, 14) + 8;
+        x += badge(x, 106, mibText(std::min(effectiveHeap(item), heap_budget_.max_mib)), info, 14) + 8;
         badge(x, 106, profile().username, muted, 14);
         bool compatible = item.state != InstanceState::Unsupported && item.state != InstanceState::Broken;
         button({988, 44, 248, 64},
-               item.state == InstanceState::NeedsFiles ? "Проверить файлы" : item.state == InstanceState::Ready ? "Играть" : "Подготовить",
+               tr(item.state == InstanceState::NeedsFiles ? "Check files" : item.state == InstanceState::Ready ? "Play" : "Prepare"),
                [this, item] { play(item); }, !task_.active && compatible, false, true, 22);
         button({272, 160, 52, 40}, "<", [this] { closeDetail(); });
         int tx = 336;
         for (int i = 0; i < tab_count; ++i) {
-            int w = draw_.width(tab_names[i], 17) + 22;
+            std::string name = tr(tab_names[i]);
+            int w = draw_.width(name, 17) + 22;
             bool selected = static_cast<int>(tab_) == i;
             SDL_Rect r{tx, 160, w, 40};
-            int index = addAction(r, [this, i] { selectTab(static_cast<Tab>(i)); }, true, std::string("tab:") + tab_names[i]);
+            int index = addAction(r, [this, i] { selectTab(static_cast<Tab>(i)); }, true, "tab:" + name);
             draw_.rounded(r, 10, selected ? raised : background);
             if (selected)
                 draw_.rounded({r.x + 10, r.y + 36, r.w - 20, 3}, 1, accent);
             if (focused(index))
                 draw_.roundedOutline({r.x - 2, r.y - 2, r.w + 4, r.h + 4}, 12, accent, 2);
-            draw_.text(tab_names[i], tx + 11, 166, 17, selected ? foreground : muted);
+            draw_.text(name, tx + 11, 166, 17, selected ? foreground : muted);
             tx += w + 4;
         }
-        hint("L/R", "Вкладки");
+        hint("L/R", tr("Tabs"));
         SDL_Rect area{272, 214, 984, 452};
         switch (tab_) {
         case Tab::Overview: overviewTab(item, area); break;
@@ -1667,19 +1681,19 @@ class Application {
             draw_.wrap(value.empty() ? "—" : value, area.x + 200, y - 2, 17, color, 400, 2);
             y += value.size() > 48 ? 56 : 36;
         };
-        line("Состояние", item.reason.empty() ? stateText(item.state) : stateText(item.state) + ": " + item.reason, stateColor(item.state));
-        line("Версия", gameText(item.game));
-        line("Последняя игра", agoText(item.last_played));
-        line("Память Java", (item.heap_mib ? std::to_string(item.heap_mib) + " МБ" : "По умолчанию · " + std::to_string(settings_.heap_mib) + " МБ") +
-                                (settings_.full_initial_heap ? " · Xms = Xmx" : " · Xms 256 МБ"));
-        line("Размер загрузок", item.installed_bytes ? sizeText(item.installed_bytes) : "");
-        line("Папка", item.root);
+        line(tr("Status"), item.reason.empty() ? stateText(item.state) : stateText(item.state) + ": " + tr(item.reason), stateColor(item.state));
+        line(tr("Version"), gameText(item.game));
+        line(tr("Last played"), agoText(item.last_played));
+        line(tr("Java memory"), (item.heap_mib ? mibText(item.heap_mib) : trf("Default · {0} MB", {std::to_string(settings_.heap_mib)})) +
+                                    (settings_.full_initial_heap ? " · Xms = Xmx" : " · Xms " + mibText(256)));
+        line(tr("Download size"), item.installed_bytes ? sizeText(item.installed_bytes) : "");
+        line(tr("Folder"), item.root);
         if (!item.packwiz_url.empty())
             line("packwiz", item.packwiz_url);
-        draw_.text("Заметки", area.x + 22, y + 6, 15, muted);
-        draw_.wrap(item.notes.empty() ? "Нет заметок" : item.notes, area.x + 22, y + 30, 17, item.notes.empty() ? muted : foreground, 576, 3);
+        draw_.text(tr("Notes"), area.x + 22, y + 6, 15, muted);
+        draw_.wrap(item.notes.empty() ? tr("No notes") : item.notes, area.x + 22, y + 30, 17, item.notes.empty() ? muted : foreground, 576, 3);
         if (item.state == InstanceState::NeedsFiles)
-            draw_.wrap("Список недостающих файлов: missing-files.json в папке сборки. Скопируй файлы и выбери «Проверить файлы».",
+            draw_.wrap(tr("Missing files are listed in missing-files.json in the instance folder. Copy the files and choose \"Check files\"."),
                        area.x + 22, area.y + area.h - 56, 15, warning, 576, 2);
         int bx = area.x + 640, bw = 344, by = area.y;
         auto action = [&](const std::string &label, std::function<void()> call, bool enabled = true) {
@@ -1687,51 +1701,53 @@ class Application {
             by += 54;
         };
         bool idle = !task_.active;
-        action("Версия и загрузчик…", [this, item] { openWizard(item); }, idle);
-        button({bx, by, bw / 2 - 4, 46}, "Название", [this, item] { renameInstance(item); });
-        button({bx + bw / 2 + 4, by, bw / 2 - 4, 46}, "Иконка", [this, item] { chooseIcon(item); });
+        action(tr("Version and loader…"), [this, item] { openWizard(item); }, idle);
+        button({bx, by, bw / 2 - 4, 46}, tr("Name"), [this, item] { renameInstance(item); });
+        button({bx + bw / 2 + 4, by, bw / 2 - 4, 46}, tr("Icon"), [this, item] { chooseIcon(item); });
         by += 54;
         if (!item.packwiz_url.empty())
-            action("Обновить моды (packwiz)", [this, item] { syncPack(item); }, idle);
-        action("Заметки", [this, item]() {
-            edit("Заметки", item.notes, 2000, [this, item = Instance(item)](std::string text) mutable {
+            action(tr("Update mods (packwiz)"), [this, item] { syncPack(item); }, idle);
+        action(tr("Notes"), [this, item]() {
+            edit(tr("Notes"), item.notes, 2000, [this, item = Instance(item)](std::string text) mutable {
                 item.notes = std::move(text);
                 saveDetail(item);
             });
         });
-        action("Копировать сборку", [this, item] { duplicate(item); }, idle);
-        action("Экспорт ZIP (PolyMC)", [this, item] { exportZip(item); }, idle);
-        action("Полная проверка файлов", [this, item] { prepare(item, true); },
+        action(tr("Copy instance"), [this, item] { duplicate(item); }, idle);
+        action(tr("Export ZIP (PolyMC)"), [this, item] { exportZip(item); }, idle);
+        action(tr("Full file check"), [this, item] { prepare(item, true); },
                idle && item.state != InstanceState::Unsupported && item.state != InstanceState::NeedsFiles);
-        action("Удалить сборку", [this, item] { removeInstance(item); }, idle);
+        action(tr("Delete instance"), [this, item] { removeInstance(item); }, idle);
     }
     void modsTab(const Instance &item, SDL_Rect area) {
         bool loader = item.game.loader.kind != LoaderKind::Vanilla && item.game.loader.kind != LoaderKind::Unknown;
         if (!loader) {
-            empty(area, "Для модов нужен загрузчик", "Эта сборка без загрузчика модов. Выбери Fabric, Quilt, Forge или NeoForge кнопкой «Версия и загрузчик» на вкладке «Обзор».");
-            button({area.x + 362, area.y + area.h - 110, 260, 50}, "Версия и загрузчик…", [this, item] { openWizard(item); }, true, false, true);
+            empty(area, tr("Mods need a loader"),
+                  tr("This instance has no mod loader. Choose Fabric, Quilt, Forge or NeoForge with \"Version and loader\" on the Overview tab."));
+            button({area.x + 362, area.y + area.h - 110, 260, 50}, tr("Version and loader…"), [this, item] { openWizard(item); }, true, false, true);
             return;
         }
         contentToolbar(area, ContentKind::Mod,
-                       std::to_string(std::count_if(mods_.begin(), mods_.end(), [](const auto &m) { return m.enabled; })) + " включено из " +
-                           std::to_string(mods_.size()));
+                       trf("{0} of {1} enabled", {std::to_string(std::count_if(mods_.begin(), mods_.end(), [](const auto &m) { return m.enabled; })),
+                                                  std::to_string(mods_.size())}));
         SDL_Rect list{area.x, area.y + 60, area.w, area.h - 60};
         if (mods_.empty()) {
-            empty(list, tab_loading_ ? "Читаю моды…" : "Модов пока нет", "Нажми «Добавить», чтобы найти моды в Modrinth или CurseForge. Обязательные зависимости установятся сами.");
+            empty(list, tr(tab_loading_ ? "Reading mods…" : "No mods yet"),
+                  tr("Press \"Add\" to find mods on Modrinth or CurseForge. Required dependencies are installed automatically."));
             return;
         }
-        hint("A", "Вкл/выкл");
-        hint("X", "Действия");
+        hint("A", tr("On/off"));
+        hint("X", tr("Actions"));
         grid("tab:mods", list, static_cast<int>(mods_.size()), 1, 60, 8,
              [this](int i, SDL_Rect r, bool focus) {
                  const auto &mod = mods_[i];
                  row(r, focus);
                  draw_.text(mod.name, r.x + 18, r.y + 6, 19, mod.enabled ? foreground : muted, r.w - 340);
-                 draw_.text(mod.problem.empty() ? (mod.version.empty() ? mod.filename : mod.version + " · " + mod.filename) : mod.problem,
+                 draw_.text(mod.problem.empty() ? (mod.version.empty() ? mod.filename : mod.version + " · " + mod.filename) : tr(mod.problem),
                             r.x + 18, r.y + 34, 14, mod.problem.empty() ? muted : warning, r.w - 340);
                  auto update = updates_.find(mod.filename);
                  if (update != updates_.end())
-                     badge(r.x + r.w - 300, r.y + 16, "Обновление", info, 14);
+                     badge(r.x + r.w - 300, r.y + 16, tr("Update"), info, 14);
                  toggleSwitch(r.x + r.w - 76, r.y + 16, mod.enabled);
              },
              [this](int i) { toggleMod(mods_[i]); }, [this](int i) { return "mod:" + mods_[i].filename; });
@@ -1744,7 +1760,7 @@ class Application {
         return x + w + 10;
     }
     void contentToolbar(SDL_Rect area, ContentKind kind, const std::string &summary) {
-        int x = fit(area.x, area.y, 46, "+ Добавить", [this, kind] {
+        int x = fit(area.x, area.y, 46, tr("+ Add"), [this, kind] {
             browsing_content_ = true;
             if (content_browse_.kind != kind || !detail_) {
                 content_browse_ = Browse{};
@@ -1752,27 +1768,27 @@ class Application {
             }
             focus_ = -1;
         }, true, false, true);
-        x = fit(x, area.y, 46, updates_checked_ ? "Проверить снова" : "Проверить обновления", [this] { checkUpdates(); }, !task_.active);
+        x = fit(x, area.y, 46, tr(updates_checked_ ? "Check again" : "Check for updates"), [this] { checkUpdates(); }, !task_.active);
         std::vector<std::pair<std::string, CatalogVersion>> all(updates_.begin(), updates_.end());
         if (!all.empty())
-            x = fit(x, area.y, 46, "Обновить все (" + std::to_string(all.size()) + ")", [this, all] { updateContent(all); }, !task_.active, false, true);
-        x = fit(x, area.y, 46, "Перечитать", [this] { loadTab(); });
+            x = fit(x, area.y, 46, trf("Update all ({0})", {std::to_string(all.size())}), [this, all] { updateContent(all); }, !task_.active, false, true);
+        x = fit(x, area.y, 46, tr("Reload"), [this] { loadTab(); });
         label(summary, x + 8, area.y + 23, 16, muted, area.x + area.w - x - 8);
     }
     void packsTab(const Instance &item, SDL_Rect area) {
         auto kind = tabKind(tab_);
-        contentToolbar(area, kind, plural(static_cast<long>(packs_.size()), "пак", "пака", "паков"));
+        contentToolbar(area, kind, countText(static_cast<long>(packs_.size()), "pack", "packs", "пак", "пака", "паков"));
         SDL_Rect list{area.x, area.y + 60, area.w, area.h - 60};
         if (packs_.empty()) {
             bool shaders = kind == ContentKind::ShaderPack;
-            empty(list, tab_loading_ ? "Читаю файлы…" : shaders ? "Шейдеров пока нет" : "Ресурспаков пока нет",
-                  shaders ? "Шейдерам нужен мод Iris (Fabric/Quilt) или Oculus (Forge). Производительность на Switch ограничена."
-                          : "Ресурспаки меняют текстуры и звуки. Включённые паки нужно выбрать в настройках игры.");
+            empty(list, tr(tab_loading_ ? "Reading files…" : shaders ? "No shaders yet" : "No resource packs yet"),
+                  tr(shaders ? "Shaders need the Iris mod (Fabric/Quilt) or Oculus (Forge). Performance on Switch is limited."
+                             : "Resource packs change textures and sounds. Enabled packs must also be selected in the game settings."));
             (void)item;
             return;
         }
-        hint("A", "Вкл/выкл");
-        hint("X", "Действия");
+        hint("A", tr("On/off"));
+        hint("X", tr("Actions"));
         grid("tab:packs", list, static_cast<int>(packs_.size()), 1, 64, 8,
              [this, item, kind](int i, SDL_Rect r, bool focus) {
                  const auto &pack = packs_[i];
@@ -1784,26 +1800,27 @@ class Application {
                          draw_.image(icon, {r.x + 12, r.y + 8, 48, 48});
                  }
                  draw_.text(pack.name, r.x + 76, r.y + 8, 19, pack.enabled ? foreground : muted, r.w - 380);
-                 draw_.text(!pack.problem.empty() ? pack.problem : pack.description.empty() ? sizeText(pack.bytes) : pack.description,
+                 draw_.text(!pack.problem.empty() ? tr(pack.problem) : pack.description.empty() ? sizeText(pack.bytes) : pack.description,
                             r.x + 76, r.y + 36, 14, pack.problem.empty() ? muted : warning, r.w - 380);
                  if (updates_.count(pack.filename))
-                     badge(r.x + r.w - 300, r.y + 18, "Обновление", info, 14);
+                     badge(r.x + r.w - 300, r.y + 18, tr("Update"), info, 14);
                  toggleSwitch(r.x + r.w - 76, r.y + 18, pack.enabled);
              },
              [this, kind](int i) {
                  auto item = *detail_;
                  auto pack = packs_[i];
-                 local("Переключение", [this, item, pack, kind] { setPackEnabled(storage_, item, kind, pack.filename, !pack.enabled); });
+                 local("Toggling pack", [this, item, pack, kind] { setPackEnabled(storage_, item, kind, pack.filename, !pack.enabled); });
              },
              [this](int i) { return "pack:" + packs_[i].filename; });
     }
     void worldsTab(const Instance &item, SDL_Rect area) {
         if (worlds_.empty()) {
-            empty(area, tab_loading_ ? "Читаю миры…" : "Миров пока нет", "Создай мир в игре, и он появится здесь: можно будет сразу запускать его, делать резервные копии и копировать.");
+            empty(area, tr(tab_loading_ ? "Reading worlds…" : "No worlds yet"),
+                  tr("Create a world in the game and it will appear here: you can launch it directly, back it up and copy it."));
             return;
         }
-        hint("A", "Действия");
-        draw_.text(plural(static_cast<long>(worlds_.size()), "мир", "мира", "миров"), area.x, area.y + 4, 16, muted);
+        hint("A", tr("Actions"));
+        draw_.text(countText(static_cast<long>(worlds_.size()), "world", "worlds", "мир", "мира", "миров"), area.x, area.y + 4, 16, muted);
         grid("tab:worlds", {area.x, area.y + 34, area.w, area.h - 34}, static_cast<int>(worlds_.size()), 1, 76, 8,
              [this, item](int i, SDL_Rect r, bool focus) {
                  const auto &world = worlds_[i];
@@ -1815,25 +1832,26 @@ class Application {
                          draw_.image(texture, icon);
                  draw_.text(world.name, r.x + 84, r.y + 10, 20, foreground, r.w - 120);
                  std::string details = world.problem.empty()
-                                           ? modeText(world.game_type, world.hardcore) + (world.cheats ? " · читы" : "") +
+                                           ? modeText(world.game_type, world.hardcore) + (world.cheats ? " · " + tr("cheats") : "") +
                                                  (world.version.empty() ? "" : " · " + world.version) +
                                                  (world.last_played ? " · " + agoText(world.last_played / 1000) : "")
-                                           : world.problem;
+                                           : tr(world.problem);
                  draw_.text(details, r.x + 84, r.y + 42, 15, world.problem.empty() ? muted : warning, r.w - 120);
              },
              [this](int i) { worldMenu(worlds_[i]); }, [this](int i) { return "world:" + worlds_[i].folder; });
     }
     void serversTab(const Instance &item, SDL_Rect area) {
-        button({area.x, area.y, 220, 46}, "+ Добавить сервер", [this] { addServer(); }, true, false, true);
-        draw_.text(quickPlaySupported(item.game.minecraft_version) ? "«Подключиться» запускает игру сразу на сервере"
-                                                                   : "Подключение передаётся игре через --server",
+        button({area.x, area.y, 220, 46}, tr("+ Add server"), [this] { addServer(); }, true, false, true);
+        draw_.text(tr(quickPlaySupported(item.game.minecraft_version) ? "\"Connect\" starts the game right on the server"
+                                                                      : "The connection is passed to the game with --server"),
                    area.x + 240, area.y + 12, 16, muted, 700);
         SDL_Rect list{area.x, area.y + 60, area.w, area.h - 60};
         if (servers_.empty()) {
-            empty(list, tab_loading_ ? "Читаю servers.dat…" : "Список серверов пуст", "Добавь сервер здесь или в самой игре. Подходят серверы без проверки лицензии (offline-mode).");
+            empty(list, tr(tab_loading_ ? "Reading servers.dat…" : "No servers yet"),
+                  tr("Add a server here or in the game. Servers without license checks (offline mode) are supported."));
             return;
         }
-        hint("A", "Действия");
+        hint("A", tr("Actions"));
         grid("tab:servers", list, static_cast<int>(servers_.size()), 1, 64, 8,
              [this](int i, SDL_Rect r, bool focus) {
                  row(r, focus);
@@ -1844,11 +1862,11 @@ class Application {
     }
     void shotsTab(SDL_Rect area) {
         if (shots_.empty()) {
-            empty(area, tab_loading_ ? "Читаю скриншоты…" : "Скриншотов пока нет", "Скриншоты из игры (F2 на клавиатуре) появятся здесь.");
+            empty(area, tr(tab_loading_ ? "Reading screenshots…" : "No screenshots yet"), tr("Screenshots from the game (F2 on a keyboard) appear here."));
             return;
         }
-        hint("A", "Открыть");
-        hint("X", "Удалить");
+        hint("A", tr("Open"));
+        hint("X", tr("Delete"));
         grid("tab:shots", area, static_cast<int>(shots_.size()), 4, 150, 12,
              [this](int i, SDL_Rect r, bool focus) {
                  row(r, focus, raised);
@@ -1861,16 +1879,16 @@ class Application {
     }
     void logsTab(SDL_Rect area) {
         if (logs_.empty()) {
-            empty(area, tab_loading_ ? "Ищу журналы…" : "Журналов пока нет", "Журналы игры и отчёты о сбоях появятся после первого запуска.");
+            empty(area, tr(tab_loading_ ? "Looking for logs…" : "No logs yet"), tr("Game logs and crash reports appear after the first launch."));
             return;
         }
-        hint("A", "Открыть");
+        hint("A", tr("Open"));
         grid("tab:logs", area, static_cast<int>(logs_.size()), 1, 58, 8,
              [this](int i, SDL_Rect r, bool focus) {
                  const auto &log = logs_[i];
                  row(r, focus);
-                 bool crash = log.name.compare(0, 4, "Краш") == 0;
-                 draw_.text(log.name, r.x + 18, r.y + 6, 18, crash ? warning : foreground, r.w - 40);
+                 bool crash = log.name.compare(0, 5, "Crash") == 0;
+                 draw_.text(logName(log.name), r.x + 18, r.y + 6, 18, crash ? warning : foreground, r.w - 40);
                  draw_.text(dateText(log.modified) + " · " + sizeText(log.bytes), r.x + 18, r.y + 32, 14, muted);
              },
              [this](int i) { openLog(logs_[i]); }, [this](int i) { return "log:" + logs_[i].name; });
@@ -1884,26 +1902,26 @@ class Application {
             draw_.text(value, area.x + 20, y + 36, 15, muted, area.w - 40);
             y += 74;
         };
-        setting("Память Java", item.heap_mib ? std::to_string(item.heap_mib) + " МБ (только для этой сборки)"
-                                             : "По умолчанию · " + std::to_string(settings_.heap_mib) + " МБ",
+        setting(tr("Java memory"), item.heap_mib ? trf("{0} MB (this instance only)", {std::to_string(item.heap_mib)})
+                                                 : trf("Default · {0} MB", {std::to_string(settings_.heap_mib)}),
                 [this, item] {
-                    openMenu("Память для «" + item.name + "»", "Максимум на этой консоли: " + std::to_string(heap_budget_.max_mib) + " МБ",
+                    openMenu(trf("Memory for \"{0}\"", {item.name}), trf("Maximum on this console: {0} MB", {std::to_string(heap_budget_.max_mib)}),
                              heapChoices(item.heap_mib, true, [this, item = Instance(item)](int size) mutable {
                                  item.heap_mib = size;
                                  saveDetail(item);
                              }));
                 });
-        setting("Дополнительные JVM-аргументы", item.jvm_args.empty() ? "Нет · разрешены -D…, -XX:… и -Xss…" : item.jvm_args, [this, item] {
-            edit("JVM-аргументы сборки", item.jvm_args, 1000, [this, item = Instance(item)](std::string text) mutable {
+        setting(tr("Extra JVM arguments"), item.jvm_args.empty() ? tr("None · -D…, -XX:… and -Xss… are allowed") : item.jvm_args, [this, item] {
+            edit(tr("Instance JVM arguments"), item.jvm_args, 1000, [this, item = Instance(item)](std::string text) mutable {
                 parseJvmArguments(text);
                 item.jvm_args = std::move(text);
                 saveDetail(item);
-                toast("JVM-аргументы сохранены");
+                toast(tr("JVM arguments saved"));
             });
         });
-        setting("Версия Minecraft и загрузчик", gameText(item.game), [this, item] { openWizard(item); });
-        setting("Профиль игрока", profile().username + " · сменить можно в общих настройках", [this] { changePage(Page::Settings); });
-        draw_.wrap("Память и JVM-аргументы применяются при следующем запуске. Общие значения задаются в разделе «Настройки».", area.x + 4, y + 8, 16,
+        setting(tr("Minecraft version and loader"), gameText(item.game), [this, item] { openWizard(item); });
+        setting(tr("Player profile"), trf("{0} · change it in the launcher settings", {profile().username}), [this] { changePage(Page::Settings); });
+        draw_.wrap(tr("Memory and JVM arguments apply on the next launch. Defaults are set on the Settings page."), area.x + 4, y + 8, 16,
                    muted, area.w - 8, 2);
     }
     void browseScreen() {
@@ -1914,41 +1932,42 @@ class Application {
         if (!b.searched && !preview_)
             search();
         if (content) {
-            header("Добавить: " + kindTitle(b.kind), detail_->name + " · " + gameText(detail_->game));
-            button({1104, 30, 152, 44}, "Назад", [this] { browsing_content_ = false; focus_ = -1; });
+            header(trf("Add: {0}", {kindTitle(b.kind)}), detail_->name + " · " + gameText(detail_->game));
+            button({1104, 30, 152, 44}, tr("Back"), [this] { browsing_content_ = false; focus_ = -1; });
         } else
-            header("Каталог сборок", "Modrinth и CurseForge · выбирай конкретную версию перед установкой");
+            header(tr("Modpack catalog"), tr("Modrinth and CurseForge · pick an exact version before installing"));
         int y = 100;
         button({272, y, 150, 46}, "Modrinth", [this] { setProvider(Provider::Modrinth); }, true, b.provider == Provider::Modrinth);
         button({430, y, 160, 46}, "CurseForge", [this] { setProvider(Provider::CurseForge); }, true, b.provider == Provider::CurseForge);
-        const char *sorts[] = {"Релевантность", "Популярные", "Обновлённые"};
-        button({602, y, 196, 46}, sorts[static_cast<int>(b.sort)], [this] {
+        const char *sorts[] = {"Relevance", "Popular", "Recently updated"};
+        button({602, y, 196, 46}, tr(sorts[static_cast<int>(b.sort)]), [this] {
             auto &target = browse();
             target.sort = static_cast<SearchSort>((static_cast<int>(target.sort) + 1) % 3);
             search();
         });
         if (!content)
-            button({810, y, 220, 46}, "Minecraft: " + (b.minecraft.empty() ? "любая" : b.minecraft), [this] {
-                edit("Версия Minecraft (пусто — любая)", packs_browse_.minecraft, 40, [this](std::string s) {
+            button({810, y, 220, 46}, "Minecraft: " + (b.minecraft.empty() ? tr("any") : b.minecraft), [this] {
+                edit(tr("Minecraft version (empty for any)"), packs_browse_.minecraft, 40, [this](std::string s) {
                     packs_browse_.minecraft = std::move(s);
                     search();
                 });
             });
         y += 58;
-        button({272, y, 820, 48}, b.query.empty() ? "Поиск по названию…" : "Поиск: " + b.query, [this] {
-            edit("Поиск", browse().query, 128, [this](std::string s) {
+        button({272, y, 820, 48}, b.query.empty() ? tr("Search by name…") : trf("Search: {0}", {b.query}), [this] {
+            edit(tr("Search"), browse().query, 128, [this](std::string s) {
                 browse().query = std::move(s);
                 search();
             });
         });
-        button({1104, y, 152, 48}, "Найти", [this] { search(); }, true, false, true);
-        hint("A", "Открыть");
-        hint("Y", "Поиск");
+        button({1104, y, 152, 48}, tr("Find"), [this] { search(); }, true, false, true);
+        hint("A", tr("Open"));
+        hint("Y", tr("Search"));
         SDL_Rect area{272, y + 62, 984, 666 - y - 62};
         if (b.results.empty()) {
-            empty(area, b.loading ? "Ищу…" : b.searched ? "Ничего не найдено" : "Каталог",
-                  content && b.kind == ContentKind::Mod ? "Показываются только моды для " + gameText(detail_->game) + ". Зависимости установятся автоматически."
-                                                        : "Совместимость проверяется перед запуском. Моды с собственными нативными библиотеками могут не работать на Switch.");
+            empty(area, tr(b.loading ? "Searching…" : b.searched ? "Nothing found" : "Catalog"),
+                  content && b.kind == ContentKind::Mod
+                      ? trf("Only mods for {0} are shown. Dependencies are installed automatically.", {gameText(detail_->game)})
+                      : tr("Compatibility is checked before launch. Mods with their own native libraries may not work on Switch."));
             return;
         }
         int count = static_cast<int>(b.results.size()) + (b.has_more ? 1 : 0);
@@ -1956,7 +1975,7 @@ class Application {
              [this, &b](int i, SDL_Rect r, bool focus) {
                  if (i == static_cast<int>(b.results.size())) {
                      row(r, focus, background);
-                     auto label = b.loading ? "Загружаю…" : "Показать ещё";
+                     std::string label = tr(b.loading ? "Loading…" : "Show more");
                      draw_.text(label, r.x + (r.w - draw_.width(label, 19)) / 2, r.y + 24, 19, accent);
                      return;
                  }
@@ -1965,7 +1984,7 @@ class Application {
                  remoteIcon(project.icon_url, {r.x + 12, r.y + 12, 60, 60}, i);
                  draw_.text(project.name, r.x + 88, r.y + 8, 20, foreground, r.w - 300);
                  draw_.text(project.summary, r.x + 88, r.y + 44, 15, muted, r.w - 110);
-                 std::string meta = (project.author.empty() ? "" : project.author + " · ") + countText(project.downloads) + " загрузок";
+                 std::string meta = (project.author.empty() ? "" : project.author + " · ") + trf("{0} downloads", {amountText(project.downloads)});
                  int w = draw_.width(meta, 15);
                  draw_.text(meta, r.x + r.w - w - 18, r.y + 12, 15, muted, 260);
              },
@@ -1990,26 +2009,27 @@ class Application {
         draw_.rounded({272, 20, 984, 136}, 14, panel);
         remoteIcon(project.icon_url, {292, 38, 100, 100}, 0);
         draw_.text(project.name, 412, 34, 28, foreground, 640);
-        draw_.text((project.author.empty() ? "" : project.author + " · ") + countText(project.downloads) + " загрузок · " +
+        draw_.text((project.author.empty() ? "" : project.author + " · ") + trf("{0} downloads", {amountText(project.downloads)}) + " · " +
                        (project.provider == Provider::Modrinth ? "Modrinth" : "CurseForge"),
                    414, 74, 16, muted, 640);
         draw_.wrap(project.summary, 414, 100, 16, foreground, 800, 2);
-        button({1104, 32, 136, 44}, "Назад", [this] {
+        button({1104, 32, 136, 44}, tr("Back"), [this] {
             browse().project.reset();
             focus_ = -1;
         });
         bool content = b.kind != ContentKind::Modpack;
-        draw_.text(content ? "Версии для " + gameText(detail_->game) : "Версии" + (b.minecraft.empty() ? "" : " для Minecraft " + b.minecraft),
+        draw_.text(content ? trf("Versions for {0}", {gameText(detail_->game)})
+                   : b.minecraft.empty() ? tr("Versions") : trf("Versions for Minecraft {0}", {b.minecraft}),
                    274, 170, 18, muted);
         if (b.kind == ContentKind::Mod)
-            draw_.text("Обязательные зависимости установятся автоматически", 760, 172, 15, muted, 490);
+            draw_.text(tr("Required dependencies are installed automatically"), 760, 172, 15, muted, 490);
         SDL_Rect area{272, 202, 984, 464};
         if (b.versions.empty()) {
-            empty(area, b.versions_loading ? "Загружаю версии…" : "Нет подходящих версий",
-                  b.versions_loading ? "" : "У проекта нет файлов для выбранной версии Minecraft или загрузчика.");
+            empty(area, tr(b.versions_loading ? "Loading versions…" : "No matching versions"),
+                  b.versions_loading ? "" : tr("The project has no files for the selected Minecraft version or loader."));
             return;
         }
-        hint("A", content ? "Установить" : "Скачать");
+        hint("A", tr(content ? "Install" : "Download"));
         grid("browse:versions", area, static_cast<int>(b.versions.size()), 1, 62, 8,
              [this, &b](int i, SDL_Rect r, bool focus) {
                  const auto &version = b.versions[i];
@@ -2037,8 +2057,8 @@ class Application {
              [&b](int i) { return "version:" + b.versions[i].name; });
     }
     void filesScreen() {
-        header("Импорт с SD-карты", "Modrinth .mrpack · CurseForge ZIP · экспорт MultiMC / PolyMC / Prism");
-        button({272, 100, 170, 46}, "Наверх", [this] {
+        header(tr("Import from SD card"), tr("Modrinth .mrpack · CurseForge ZIP · MultiMC / PolyMC / Prism export"));
+        button({272, 100, 170, 46}, tr("Up"), [this] {
             if (directory_ == browser_root_)
                 return;
             auto parent = directory_.substr(0, directory_.find_last_of('/'));
@@ -2049,15 +2069,15 @@ class Application {
         draw_.text(directory_, 460, 112, 17, muted, 790);
         SDL_Rect area{272, 160, 984, 506};
         if (files_.empty()) {
-            empty(area, "Здесь нет архивов", "Скопируй сборку (.mrpack или .zip) на SD-карту и открой её папку здесь.");
+            empty(area, tr("No archives here"), tr("Copy a modpack (.mrpack or .zip) to the SD card and open its folder here."));
             return;
         }
-        hint("A", "Открыть");
+        hint("A", tr("Open"));
         grid("files:" + directory_, area, static_cast<int>(files_.size()), 1, 54, 6,
              [this](int i, SDL_Rect r, bool focus) {
                  const auto &file = files_[i];
                  row(r, focus);
-                 badge(r.x + 14, r.y + 13, file.directory ? "Папка" : "Архив", file.directory ? muted : accent, 13);
+                 badge(r.x + 14, r.y + 13, tr(file.directory ? "Folder" : "Archive"), file.directory ? muted : accent, 13);
                  draw_.text(file.name, r.x + 100, r.y + 12, 19, foreground, r.w - 120);
              },
              [this](int i) {
@@ -2071,39 +2091,39 @@ class Application {
     }
     void inspectionScreen() {
         const auto &plan = *inspected_;
-        header("Установить сборку", archive_);
+        header(tr("Install modpack"), archive_);
         draw_.rounded({272, 104, 984, 400}, 14, panel);
         if (!inspected_icon_.empty())
             remoteIcon(inspected_icon_, {300, 132, 96, 96}, 2);
         else
             pattern({300, 132, 96, 96}, info, 2);
         draw_.text(plan.name, 420, 130, 28, foreground, 800);
-        draw_.text(gameText(plan.game) + (plan.version.empty() ? "" : " · версия " + plan.version), 422, 172, 18, muted, 800);
+        draw_.text(gameText(plan.game) + (plan.version.empty() ? "" : " · " + trf("version {0}", {plan.version})), 422, 172, 18, muted, 800);
         int x = 422;
-        x += badge(x, 204, plural(static_cast<long>(plan.downloads.size()), "файл", "файла", "файлов"), info) + 8;
-        x += badge(x, 204, sizeText(plan.required_free_bytes) + " загрузок", info) + 8;
-        badge(x, 204, "свободно " + sizeText(free_bytes_), free_bytes_ > plan.required_free_bytes ? accent : danger);
+        x += badge(x, 204, countText(static_cast<long>(plan.downloads.size()), "file", "files", "файл", "файла", "файлов"), info) + 8;
+        x += badge(x, 204, trf("{0} to download", {sizeText(plan.required_free_bytes)}), info) + 8;
+        badge(x, 204, trf("{0} free", {sizeText(free_bytes_)}), free_bytes_ > plan.required_free_bytes ? accent : danger);
         int y = 260;
         if (plan.notices.empty())
-            draw_.wrap("Сборка будет установлена в отдельную папку на SD-карте. Файлы Minecraft и загрузчика подготовятся перед первым запуском.",
+            draw_.wrap(tr("The modpack is installed into its own folder on the SD card. Minecraft and loader files are prepared before the first launch."),
                        300, y, 18, muted, 920, 3);
         for (std::size_t i = 0; i < plan.notices.size() && i < 6; ++i, y += 34)
-            draw_.text("- " + plan.notices[i], 300, y, 16, warning, 920);
-        button({272, 524, 330, 56}, "Установить", [this] { import(); }, !task_.active && plan.state != InstanceState::Unsupported, false, true);
-        button({618, 524, 300, 56}, include_optional_ ? "Опциональные файлы: да" : "Опциональные файлы: нет",
+            draw_.text("- " + tr(plan.notices[i]), 300, y, 16, warning, 920);
+        button({272, 524, 330, 56}, tr("Install"), [this] { import(); }, !task_.active && plan.state != InstanceState::Unsupported, false, true);
+        button({618, 524, 300, 56}, tr(include_optional_ ? "Optional files: yes" : "Optional files: no"),
                [this] { include_optional_ = !include_optional_; });
-        button({934, 524, 322, 56}, "Отмена", [this] {
+        button({934, 524, 322, 56}, tr("Cancel"), [this] {
             inspected_.reset();
             focus_ = -1;
         });
     }
     void tasksScreen() {
-        header("Задачи", "Загрузки и подготовка идут в фоне — можно продолжать пользоваться лаунчером");
+        header(tr("Tasks"), tr("Downloads and preparation run in the background, so you can keep using the launcher"));
         draw_.rounded({272, 104, 984, 210}, 14, panel);
         if (task_.active) {
             auto p = task_.progress();
             draw_.text(task_.title, 300, 124, 26, foreground, 930);
-            draw_.wrap(p.detail.empty() ? "Подожди…" : p.detail, 300, 168, 18, muted, 930, 2);
+            draw_.wrap(tr(p.detail.empty() ? "Please wait…" : p.detail), 300, 168, 18, muted, 930, 2);
             draw_.rounded({300, 236, 928, 10}, 5, border);
             if (p.total)
                 draw_.rounded({300, 236, std::max(10, static_cast<int>(928 * std::min(1.0, p.completed / double(p.total)))), 10}, 5, accent);
@@ -2112,37 +2132,37 @@ class Application {
                               accent);
             else
                 draw_.rounded({300 + static_cast<int>((SDL_GetTicks() / 8) % 740), 236, 188, 10}, 5, accent);
-            draw_.text(p.files_total ? std::to_string(p.files_done) + " / " + std::to_string(p.files_total) + " файлов"
-                       : p.stage == "assets" ? std::to_string(p.completed) + " / " + std::to_string(p.total) + " ресурсов"
+            draw_.text(p.files_total ? trf("{0} / {1} files", {std::to_string(p.files_done), std::to_string(p.files_total)})
+                       : p.stage == "assets" ? trf("{0} / {1} assets", {std::to_string(p.completed), std::to_string(p.total)})
                        : p.total ? sizeText(p.completed) + " / " + sizeText(p.total)
                                  : "",
                        300, 262, 17, muted);
-            button({1036, 254, 196, 46}, task_.cancelled ? "Отменяю…" : "Отменить", [this] { task_.cancelled = true; }, !task_.cancelled);
+            button({1036, 254, 196, 46}, tr(task_.cancelled ? "Cancelling…" : "Cancel task"), [this] { task_.cancelled = true; }, !task_.cancelled);
         } else if (processor_launch_) {
-            draw_.text("Нужна подготовка загрузчика", 300, 124, 26);
-            draw_.wrap("Файлы скачаны. Следующий шаг запустит установщик Forge/NeoForge и закроет приложение. Затем снова открой MineSwitch и выбери эту сборку.",
+            draw_.text(tr("Loader preparation needed"), 300, 124, 26);
+            draw_.wrap(tr("Files are downloaded. The next step runs the Forge/NeoForge installer and closes the app. Then open MineSwitch again and choose this instance."),
                        300, 168, 18, muted, 930, 3);
-            button({300, 248, 300, 50}, "Запустить подготовку", [this] {
+            button({300, 248, 300, 50}, tr("Run preparation"), [this] {
 #ifdef __SWITCH__
                 pending_launch_ = std::move(processor_launch_);
                 processor_launch_.reset();
 #else
-                toast("Для подготовки открой эту сборку в MineSwitch на консоли.", info);
+                toast(tr("To prepare it, open this instance in MineSwitch on the console."), info);
 #endif
             }, true, false, true);
-            button({616, 248, 160, 50}, "Позже", [this] {
+            button({616, 248, 160, 50}, tr("Later"), [this] {
                 processor_launch_.reset();
                 changePage(Page::Library);
             });
         } else {
-            draw_.text("Нет активных задач", 300, 124, 26);
-            draw_.text("Здесь показываются загрузки, установка, подготовка и копирование", 300, 168, 18, muted);
-            button({300, 236, 220, 50}, "В библиотеку", [this] { changePage(Page::Library); }, true, false, true);
+            draw_.text(tr("No active tasks"), 300, 124, 26);
+            draw_.text(tr("Downloads, installs, preparation and copies are shown here"), 300, 168, 18, muted);
+            button({300, 236, 220, 50}, tr("Go to library"), [this] { changePage(Page::Library); }, true, false, true);
         }
-        draw_.text("Недавние", 274, 332, 18, muted);
+        draw_.text(tr("Recent"), 274, 332, 18, muted);
         SDL_Rect area{272, 362, 984, 304};
         if (history_.empty()) {
-            draw_.text("Пока пусто", 274, 372, 17, muted);
+            draw_.text(tr("Nothing yet"), 274, 372, 17, muted);
             return;
         }
         grid("history", area, static_cast<int>(history_.size()), 1, 56, 6,
@@ -2155,94 +2175,104 @@ class Application {
                  auto when = agoText(entry.when);
                  draw_.text(when, r.x + r.w - draw_.width(when, 14) - 16, r.y + 8, 14, muted);
              },
-             [this](int i) { openMenu(history_[i].title, history_[i].result, {{"Закрыть", [] {}}}); });
+             [this](int i) { openMenu(history_[i].title, history_[i].result, {{tr("Close"), [] {}}}); });
     }
     void settingsScreen() {
-        std::string cpu = "Ядра CPU: ?";
+        std::string cpu = trf("CPU cores: {0}", {"?"});
 #ifdef __SWITCH__
         u64 core_mask = 0;
         if (R_SUCCEEDED(svcGetInfo(&core_mask, InfoType_CoreMask, CUR_PROCESS_HANDLE, 0))) {
-            char text[64];
-            std::snprintf(text, sizeof(text), "Ядра CPU: %d (маска 0x%llx)", __builtin_popcountll(core_mask),
-                          static_cast<unsigned long long>(core_mask));
-            cpu = text;
+            char mask[32];
+            std::snprintf(mask, sizeof(mask), "0x%llx", static_cast<unsigned long long>(core_mask));
+            cpu = trf("CPU cores: {0} (mask {1})", {std::to_string(__builtin_popcountll(core_mask)), mask});
         }
 #else
-        cpu = "Ядра CPU: " + std::to_string(SDL_GetCPUCount());
+        cpu = trf("CPU cores: {0}", {std::to_string(SDL_GetCPUCount())});
 #endif
-        header("Настройки", cpu + " · память " + sizeText(heap_budget_.process_bytes) + " · профили, Java, каталоги");
+        header(tr("Settings"), trf("{0} · memory {1} · profiles, Java, catalogs", {cpu, sizeText(heap_budget_.process_bytes)}));
         struct Item {
             std::string title, value;
             std::function<void()> call;
             bool section = false;
         };
         std::vector<Item> items;
-        items.push_back({"Профили", "", {}, true});
+        items.push_back({tr("Profiles"), "", {}, true});
         for (const auto &p : profiles_)
-            items.push_back({p.username, p.id == settings_.profile_id ? "Используется для игры" : "Выбрать",
+            items.push_back({p.username, tr(p.id == settings_.profile_id ? "Used for playing" : "Select"),
                              [this, p] { profileMenu(p); }});
-        items.push_back({"+ Добавить профиль", "Офлайн-профиль: одиночная игра и серверы без проверки аккаунта", [this] {
-                             edit("Имя нового игрока", "", 16, [this](std::string name) {
+        items.push_back({tr("+ Add profile"), tr("Offline profile: singleplayer and servers without account checks"), [this] {
+                             edit(tr("New player name"), "", 16, [this](std::string name) {
                                  if (!usernameValid(name))
-                                     throw Error("profile", "Имя: 1–16 латинских букв, цифр или _");
+                                     throw Error("profile", "Name: 1–16 Latin letters, digits or _");
                                  Profile p{newId(), name};
                                  profiles_.push_back(p);
                                  storage_.saveProfiles(profiles_);
                                  settings_.profile_id = p.id;
                                  storage_.saveSettings(settings_);
-                                 toast("Профиль " + name + " добавлен и выбран");
+                                 toast(trf("Profile {0} added and selected", {name}));
                              });
                          }});
         items.push_back({"Java", "", {}, true});
-        items.push_back({"Память по умолчанию: " + std::to_string(settings_.heap_mib) + " МБ",
-                         "Максимум на этой консоли: " + std::to_string(heap_budget_.max_mib) + " МБ" +
-                             (heap_budget_.process_bytes ? " · доступно приложению " + sizeText(heap_budget_.process_bytes) : ""),
+        items.push_back({trf("Default memory: {0} MB", {std::to_string(settings_.heap_mib)}),
+                         trf("Maximum on this console: {0} MB", {std::to_string(heap_budget_.max_mib)}) +
+                             (heap_budget_.process_bytes ? " · " + trf("{0} available to the app", {sizeText(heap_budget_.process_bytes)}) : ""),
                          [this] {
-                             openMenu("Память Java по умолчанию", "Сборки с собственным значением его сохранят",
+                             openMenu(tr("Default Java memory"), tr("Instances with their own value keep it"),
                                       heapChoices(settings_.heap_mib, false, [this](int size) {
                                           settings_.heap_mib = size;
                                           storage_.saveSettings(settings_);
                                       }));
                          }});
-        items.push_back({settings_.full_initial_heap ? "Начальная память (Xms): равна максимуму" : "Начальная память (Xms): 256 МБ",
-                         settings_.full_initial_heap ? "Вся память Java выделяется сразу при запуске игры"
-                                                     : "Куча растёт по мере надобности до максимума",
+        items.push_back({tr(settings_.full_initial_heap ? "Initial memory (Xms): same as maximum" : "Initial memory (Xms): 256 MB"),
+                         tr(settings_.full_initial_heap ? "All Java memory is reserved when the game starts"
+                                                        : "The heap grows as needed up to the maximum"),
                          [this] {
                              settings_.full_initial_heap = !settings_.full_initial_heap;
                              storage_.saveSettings(settings_);
                          }});
-        items.push_back({"JVM-аргументы для всех сборок", settings_.jvm_args.empty() ? "Нет · разрешены -D…, -XX:… и -Xss…" : settings_.jvm_args, [this] {
-                             edit("JVM-аргументы", settings_.jvm_args, 1000, [this](std::string text) {
+        items.push_back({tr("JVM arguments for all instances"), settings_.jvm_args.empty() ? tr("None · -D…, -XX:… and -Xss… are allowed") : settings_.jvm_args, [this] {
+                             edit(tr("JVM arguments"), settings_.jvm_args, 1000, [this](std::string text) {
                                  parseJvmArguments(text);
                                  settings_.jvm_args = std::move(text);
                                  storage_.saveSettings(settings_);
-                                 toast("JVM-аргументы сохранены");
+                                 toast(tr("JVM arguments saved"));
                              });
                          }});
-        items.push_back({"Каталоги", "", {}, true});
-        items.push_back({settings_.curseforge_key.empty() ? "CurseForge: ключ получается автоматически" : "CurseForge: используется свой ключ",
-                         "Свой ключ API можно указать вместо общего", [this] {
-                             edit("Ключ API CurseForge (пусто — автоматически)", settings_.curseforge_key, 4096,
+        items.push_back({tr("Catalogs"), "", {}, true});
+        items.push_back({tr(settings_.curseforge_key.empty() ? "CurseForge: key is fetched automatically" : "CurseForge: using your own key"),
+                         tr("You can set your own API key instead of the shared one"), [this] {
+                             edit(tr("CurseForge API key (empty for automatic)"), settings_.curseforge_key, 4096,
                                   [this](std::string key) {
                                       settings_.curseforge_key = std::move(key);
                                       storage_.saveSettings(settings_);
-                                      toast("Настройки CurseForge сохранены");
+                                      toast(tr("CurseForge settings saved"));
                                   },
                                   true);
                          }});
-        items.push_back({"Интерфейс", "", {}, true});
-        items.push_back({settings_.reduced_motion ? "Анимации: выключены" : "Анимации: включены", "Плавная прокрутка списков", [this] {
+        items.push_back({tr("Interface"), "", {}, true});
+        // Bilingual title so the row is recognizable in either language.
+        items.push_back({std::string("Language / Язык: ") + (language() == Language::Russian ? "Русский" : "English"), tr("Launcher interface language"),
+                         [this] {
+                             auto choose = [this](Language value) {
+                                 settings_.language = languageCode(value);
+                                 storage_.saveSettings(settings_);
+                                 setLanguage(value);
+                             };
+                             openMenu("Language / Язык", "", {{"English", [choose] { choose(Language::English); }},
+                                                             {"Русский", [choose] { choose(Language::Russian); }}});
+                         }});
+        items.push_back({tr(settings_.reduced_motion ? "Animations: off" : "Animations: on"), tr("Smooth list scrolling"), [this] {
                              settings_.reduced_motion = !settings_.reduced_motion;
                              storage_.saveSettings(settings_);
                          }});
-        items.push_back({"Обслуживание", "", {}, true});
-        items.push_back({"Очистить кэш", "Иконки каталогов и скачанные архивы сборок (установленные сборки не затрагиваются)", [this] { clearCache(); }});
-        items.push_back({"О программе", "MineSwitch · Java 21 HotSpot · хранилище " + storage_.root(),
+        items.push_back({tr("Maintenance"), "", {}, true});
+        items.push_back({tr("Clear cache"), tr("Catalog icons and downloaded modpack archives (installed instances are not affected)"), [this] { clearCache(); }});
+        items.push_back({tr("About"), trf("MineSwitch · Java 21 HotSpot · storage {0}", {storage_.root()}),
                          [this] {
-                             openMenu("MineSwitch", "Лаунчер Minecraft Java Edition для Nintendo Switch. Java 21, LWJGL 3.3.3, NXVK + Zink. Вход Microsoft пока не поддерживается.",
-                                      {{"Закрыть", [] {}}});
+                             openMenu("MineSwitch", tr("Minecraft Java Edition launcher for Nintendo Switch. Java 21, LWJGL 3.3.3, NXVK + Zink. Microsoft sign-in is not supported yet."),
+                                      {{tr("Close"), [] {}}});
                          }});
-        hint("A", "Выбрать");
+        hint("A", tr("Select"));
         grid("settings", {272, 100, 984, 566}, static_cast<int>(items.size()), 1, 62, 6,
              [this, items](int i, SDL_Rect r, bool focus) {
                  const auto &item = items[i];
@@ -2261,14 +2291,14 @@ class Application {
              [items](int i) { return "setting:" + items[i].title; });
     }
     void profileMenu(const Profile &p) {
-        std::vector<MenuItem> items{{"Использовать", [this, p] {
+        std::vector<MenuItem> items{{tr("Use"), [this, p] {
                                          settings_.profile_id = p.id;
                                          storage_.saveSettings(settings_);
                                      }},
-                                    {"Переименовать", [this, p] {
-                                         edit("Имя игрока (A–Z, 0–9, _)", p.username, 16, [this, p](std::string value) {
+                                    {tr("Rename"), [this, p] {
+                                         edit(tr("Player name (A–Z, 0–9, _)"), p.username, 16, [this, p](std::string value) {
                                              if (!usernameValid(value))
-                                                 throw Error("profile", "Имя: 1–16 латинских букв, цифр или _");
+                                                 throw Error("profile", "Name: 1–16 Latin letters, digits or _");
                                              for (auto &item : profiles_)
                                                  if (item.id == p.id)
                                                      item.username = value;
@@ -2276,7 +2306,7 @@ class Application {
                                          });
                                      }}};
         if (profiles_.size() > 1)
-            items.push_back({"Удалить", [this, p] {
+            items.push_back({tr("Delete"), [this, p] {
                                  profiles_.erase(std::remove_if(profiles_.begin(), profiles_.end(), [&](const Profile &x) { return x.id == p.id; }),
                                                  profiles_.end());
                                  storage_.saveProfiles(profiles_);
@@ -2286,10 +2316,10 @@ class Application {
                                  }
                              },
                              true});
-        openMenu(p.username, "Локальный профиль", std::move(items));
+        openMenu(p.username, tr("Local profile"), std::move(items));
     }
     void clearCache() {
-        task("Очистка кэша", [this](ProgressCallback, const std::atomic_bool *) -> Apply {
+        task(tr("Clearing cache"), [this](ProgressCallback, const std::atomic_bool *) -> Apply {
             std::uint64_t removed = 0;
             for (const char *folder : {"cache/icons", "cache/pack-archives"}) {
                 auto path = joinPath(storage_.root(), folder);
@@ -2318,16 +2348,16 @@ class Application {
             return [this, removed] {
                 images_.clear();
                 refresh();
-                toast("Освобождено " + sizeText(removed));
+                toast(trf("Freed {0}", {sizeText(removed)}));
             };
         });
     }
     void wizardScreen() {
         auto &w = *wizard_;
-        draw_.text(w.editing ? "Версия и загрузчик · " + w.target.name : "Новая сборка", 272, 26, 32, foreground, 820);
-        const char *filters[] = {"Релизы", "Снапшоты", "Все"};
+        draw_.text(w.editing ? trf("Version and loader · {0}", {w.target.name}) : tr("New instance"), 272, 26, 32, foreground, 820);
+        const char *filters[] = {"Releases", "Snapshots", "All"};
         for (int i = 0; i < 3; ++i)
-            button({272 + i * 158, 94, 150, 44}, filters[i], [this, i] { wizard_->filter = i; }, true, w.filter == i, false, 18);
+            button({272 + i * 158, 94, 150, 44}, tr(filters[i]), [this, i] { wizard_->filter = i; }, true, w.filter == i, false, 18);
         std::vector<int> shown;
         for (int i = 0; i < static_cast<int>(w.versions.size()); ++i) {
             const auto &v = w.versions[i];
@@ -2337,8 +2367,8 @@ class Application {
         SDL_Rect left{272, 150, 470, 446};
         // Registered after the filters so the first focus lands on them.
         if (w.versions.empty()) {
-            empty(left, w.versions_loading ? "Загружаю версии…" : "Список недоступен",
-                  w.versions_error.empty() ? "" : w.versions_error + " Можно ввести версию вручную.");
+            empty(left, tr(w.versions_loading ? "Loading versions…" : "List unavailable"),
+                  w.versions_error.empty() ? "" : w.versions_error + " " + tr("You can enter the version manually."));
         } else
             grid("wizard:versions", left, static_cast<int>(shown.size()), 1, 52, 6,
                  [this, shown](int i, SDL_Rect r, bool focus) {
@@ -2350,28 +2380,28 @@ class Application {
                      draw_.text(v.id, r.x + 20, r.y + 12, 19, foreground, 180);
                      draw_.text(v.released.substr(0, 10), r.x + 200, r.y + 15, 15, muted);
                      bool ok = v.java_major == 21;
-                     badge(r.x + r.w - (ok ? 92 : 132), r.y + 12, ok ? "Java 21" : "Java " + std::to_string(v.java_major) + " · нет", ok ? accent : muted, 13);
+                     badge(r.x + r.w - (ok ? 92 : 132), r.y + 12, ok ? "Java 21" : trf("Java {0} · no", {std::to_string(v.java_major)}), ok ? accent : muted, 13);
                  },
                  [this, shown](int i) {
                      wizard_->minecraft = wizard_->versions[shown[i]].id;
                      loadLoaderVersions();
                  },
                  [this, shown](int i) { return "mc:" + wizard_->versions[shown[i]].id; });
-        button({272, 606, 470, 46}, "Ввести версию вручную", [this] {
-            edit("Версия Minecraft", wizard_->minecraft.empty() ? "1.21.1" : wizard_->minecraft, 40, [this](std::string version) {
+        button({272, 606, 470, 46}, tr("Enter version manually"), [this] {
+            edit(tr("Minecraft version"), wizard_->minecraft.empty() ? "1.21.1" : wizard_->minecraft, 40, [this](std::string version) {
                 if (version.empty() || version.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_") != std::string::npos)
-                    throw Error("version", "Введи номер версии Minecraft, например 1.21.1");
+                    throw Error("version", "Enter a Minecraft version number, for example 1.21.1");
                 wizard_->minecraft = version;
                 loadLoaderVersions();
             });
         });
         int x = 760;
         if (!w.editing)
-            button({x, 94, 496, 44}, w.name.empty() ? "Название: по версии" : "Название: " + w.name, [this] {
-                edit("Название сборки", wizard_->name, 120, [this](std::string name) { wizard_->name = std::move(name); });
+            button({x, 94, 496, 44}, w.name.empty() ? tr("Name: from version") : trf("Name: {0}", {w.name}), [this] {
+                edit(tr("Instance name"), wizard_->name, 120, [this](std::string name) { wizard_->name = std::move(name); });
             });
         else
-            draw_.text("Сейчас: " + gameText(w.target.game), x, 108, 16, muted, 496);
+            draw_.text(trf("Current: {0}", {gameText(w.target.game)}), x, 108, 16, muted, 496);
         const LoaderKind loaders[] = {LoaderKind::Vanilla, LoaderKind::Fabric, LoaderKind::Quilt, LoaderKind::Forge, LoaderKind::NeoForge};
         for (int i = 0; i < 5; ++i) {
             auto kind = loaders[i];
@@ -2383,9 +2413,10 @@ class Application {
         }
         SDL_Rect right{x, 260, 496, 336};
         if (w.loader == LoaderKind::Vanilla)
-            empty(right, "Без загрузчика", "Чистый Minecraft. Загрузчик можно добавить позже в настройках сборки.");
+            empty(right, tr("No loader"), tr("Plain Minecraft. You can add a loader later in the instance settings."));
         else if (w.loader_versions.empty())
-            empty(right, w.loader_loading ? "Загружаю версии загрузчика…" : "Нет версий", w.loader_error.empty() ? "Для этой версии Minecraft загрузчик недоступен." : w.loader_error);
+            empty(right, tr(w.loader_loading ? "Loading loader versions…" : "No versions"),
+                  w.loader_error.empty() ? tr("The loader is not available for this Minecraft version.") : w.loader_error);
         else
             grid("wizard:loader", right, static_cast<int>(w.loader_versions.size()), 1, 46, 6,
                  [this](int i, SDL_Rect r, bool focus) {
@@ -2396,20 +2427,20 @@ class Application {
                          draw_.rounded({r.x + 6, r.y + 10, 4, r.h - 20}, 2, accent);
                      draw_.text(v.version, r.x + 20, r.y + 9, 18, foreground, r.w - 140);
                      if (!v.stable)
-                         badge(r.x + r.w - 100, r.y + 10, "бета", warning, 13);
+                         badge(r.x + r.w - 100, r.y + 10, tr("beta"), warning, 13);
                  },
                  [this](int i) { wizard_->loader_version = wizard_->loader_versions[i].version; },
                  [this](int i) { return "loader:" + wizard_->loader_versions[i].version; });
-        std::string summary = w.minecraft.empty() ? "Версия не выбрана"
+        std::string summary = w.minecraft.empty() ? tr("No version selected")
                                                   : "Minecraft " + w.minecraft + " · " + loaderText(w.loader) +
                                                         (w.loader == LoaderKind::Vanilla || w.loader_version.empty() ? "" : " " + w.loader_version);
         draw_.text(summary, x, 618, 16, muted, 250);
-        button({x + 266, 606, 230, 46}, w.editing ? "Применить" : "Создать", [this] { finishWizard(); }, !w.minecraft.empty(), false, true);
-        button({1104, 26, 152, 44}, "Отмена", [this] {
+        button({x + 266, 606, 230, 46}, tr(w.editing ? "Apply" : "Create"), [this] { finishWizard(); }, !w.minecraft.empty(), false, true);
+        button({1104, 26, 152, 44}, tr("Cancel"), [this] {
             wizard_.reset();
             focus_ = -1;
         });
-        hint("A", "Выбрать");
+        hint("A", tr("Select"));
     }
     void viewerScreen() {
         draw_.box({0, 0, 1280, 720}, {0, 0, 0, 255});
@@ -2423,7 +2454,7 @@ class Application {
         if (auto *texture = images_.get(shot.path, 1280, 720))
             draw_.image(texture, {0, 0, 1280, 720});
         else
-            draw_.text("Загружаю…", 580, 340, 22, muted);
+            draw_.text(tr("Loading…"), 580, 340, 22, muted);
         draw_.box({0, 0, 1280, 52}, {0, 0, 0, 150});
         draw_.text(shot.name, 24, 10, 19, foreground, 900);
         auto counter = std::to_string(index + 1) + " / " + std::to_string(shots_.size());
@@ -2434,15 +2465,15 @@ class Application {
         if (index > 0)
             images_.get(shots_[index - 1].path, 1280, 720);
         hints_.clear();
-        hint("L/R", "Листать");
-        hint("X", "Удалить");
-        hint("B", "Закрыть");
+        hint("L/R", tr("Browse"));
+        hint("X", tr("Delete"));
+        hint("B", tr("Close"));
     }
     void logScreen() {
         auto &log = *log_;
         draw_.box({0, 0, 1280, 720}, background);
-        draw_.text(log.title, 24, 14, 22, foreground, 900);
-        auto status = plural(static_cast<long>(log.lines.size()), "строка", "строки", "строк");
+        draw_.text(logName(log.title), 24, 14, 22, foreground, 900);
+        auto status = countText(static_cast<long>(log.lines.size()), "line", "lines", "строка", "строки", "строк");
         draw_.text(status, 1256 - draw_.width(status, 15), 20, 15, muted);
         const int visible = 30, line_h = 20;
         log.top = std::clamp(log.top, 0, std::max(0, static_cast<int>(log.lines.size()) - visible));
@@ -2462,10 +2493,10 @@ class Application {
             draw_.text(line, 28, 64 + i * line_h, 14, color, 1224);
         }
         hints_.clear();
-        hint("D-pad", "Прокрутка");
-        hint("L/R", "Страницы");
-        hint("Y", "В конец");
-        hint("B", "Закрыть");
+        hint("D-pad", tr("Scroll"));
+        hint("L/R", tr("Pages"));
+        hint("Y", tr("To end"));
+        hint("B", tr("Close"));
     }
     void modalScreen() {
         auto &m = *modal_;
@@ -2499,8 +2530,8 @@ class Application {
              },
              [&m](int i) { return "menu:" + m.items[i].label; });
         hints_.clear();
-        hint("A", "Выбрать");
-        hint("B", "Закрыть");
+        hint("A", tr("Select"));
+        hint("B", tr("Close"));
     }
     void toastsAndFooter() {
         draw_.box({240, 672, 1040, 48}, {10, 17, 26});
@@ -2512,7 +2543,7 @@ class Application {
             label(h.second, x + w + 8, 696, 16, muted);
             x += w + draw_.width(h.second, 16) + 24;
         }
-        auto right = std::string(task_.active ? task_.title : "+  Выход");
+        auto right = task_.active ? task_.title : tr("+  Exit");
         draw_.text(right, 1256 - std::min(380, draw_.width(right, 15)), 686, 15, task_.active ? accent : muted, 380);
         Uint32 now = SDL_GetTicks();
         while (!toasts_.empty() && toasts_.front().until < now)
@@ -2557,7 +2588,7 @@ class Application {
                 case Page::Tasks: tasksScreen(); break;
                 case Page::Settings: settingsScreen(); break;
                 }
-            hint("B", "Назад");
+            hint("B", tr("Back"));
         }
         if (modal_)
             modalScreen();
@@ -2579,7 +2610,7 @@ class Application {
             draw_.text(dialog_title_, 251, 239, 26, foreground, 774);
             draw_.rounded({250, 296, 780, 72}, 10, background);
             draw_.text(secret_ ? std::string(std::min<std::size_t>(dialog_.size(), 42), '*') : dialog_, 271, 316, 24, foreground, 736);
-            draw_.text("Enter — сохранить    Esc — отмена", 251, 414, 21, muted);
+            draw_.text(tr("Enter: save    Esc: cancel"), 251, 414, 21, muted);
         }
     }
 
@@ -2599,7 +2630,7 @@ class Application {
         requireSafePath(path);
         DIR *raw = ::opendir(path.c_str());
         if (!raw)
-            throw Error("browser", "Не удалось открыть папку");
+            throw Error("browser", "Could not open the folder");
         std::unique_ptr<DIR, int (*)(DIR *)> directory(raw, ::closedir);
         std::vector<FileEntry> entries;
         while (auto *entry = ::readdir(directory.get())) {
@@ -2741,7 +2772,7 @@ class Application {
                     return play(item);
         }
         if ((page_ == Page::Catalog && !detail_) || (detail_ && browsing_content_))
-            edit("Поиск", browse().query, 128, [this](std::string s) {
+            edit(tr("Search"), browse().query, 128, [this](std::string s) {
                 browse().query = std::move(s);
                 search();
             });
@@ -2930,9 +2961,9 @@ class Application {
     }
     void finished(Job &job, bool heavy) {
         Apply apply;
-        std::string error;
+        std::string error, code;
         auto title = job.title;
-        if (!job.take(apply, error))
+        if (!job.take(apply, error, code))
             return;
         if (!heavy && queued_query_) {
             auto next = std::move(*queued_query_);
@@ -2942,7 +2973,7 @@ class Application {
         }
         if (!error.empty()) {
             // Cancelled queries were replaced on purpose; nothing to report.
-            if (!heavy && error.find("отменена") != std::string::npos)
+            if (!heavy && (code == "cancelled" || code == "catalog.cancelled"))
                 return;
             toast(error, danger);
             if (heavy)
@@ -2955,7 +2986,7 @@ class Application {
         if (apply)
             apply();
         if (heavy && !pending_launch_ && !processor_launch_ && page_ == Page::Tasks && !task_.active)
-            remember(title, "Готово", true);
+            remember(title, tr("Done"), true);
     }
 
   public:
@@ -2964,14 +2995,15 @@ class Application {
         storage_.initialize();
         storage_.cleanupTransactions();
         settings_ = storage_.loadSettings();
+        setLanguage(parseLanguage(settings_.language));
         if (!heap_override && settings_.heap_mib > heap_budget_.max_mib) {
             settings_.heap_mib = heap_budget_.max_mib;
             storage_.saveSettings(settings_);
-            toast("Память Java ограничена доступным максимумом: " + std::to_string(heap_budget_.max_mib) + " МБ", info);
+            toast(trf("Java memory was limited to the available maximum: {0} MB", {std::to_string(heap_budget_.max_mib)}), info);
         }
         if (heap_override) {
             if (heap_override < 256 || heap_override > heap_budget_.max_mib)
-                throw Error("prepare_heap", "Максимум Java в этом режиме: " + std::to_string(heap_budget_.max_mib) + " МБ");
+                throw Error("prepare_heap", "Java maximum in this mode: " + std::to_string(heap_budget_.max_mib) + " MB");
             settings_.heap_mib = heap_override;
             storage_.saveSettings(settings_);
 #ifdef __SWITCH__
@@ -2998,11 +3030,11 @@ class Application {
 #endif
         if (preview_) {
             instances_.clear();
-            const char *names[] = {"Minecraft 1.21.1", "Мир с друзьями", "Fabulously Optimized", "Новая сборка"};
+            const char *names[] = {"Minecraft 1.21.1", "With friends", "Fabulously Optimized", "New instance"};
             for (int i = 0; i < 4; ++i) {
                 Instance demo;
                 demo.id = "preview" + std::to_string(i);
-                demo.name = names[i];
+                demo.name = tr(names[i]);
                 demo.game.minecraft_version = "1.21.1";
                 demo.game.loader.kind = i == 0 || i == 3 ? LoaderKind::Vanilla : LoaderKind::Fabric;
                 demo.game.loader.version = i == 0 || i == 3 ? "" : "0.16.5";
@@ -3021,6 +3053,7 @@ class Application {
     }
 #ifdef MINESWITCH_UI_TEST
     void smokeTest(const std::string &archive, const std::string &screenshot);
+    void showcase(const std::string &directory);
 #endif
     void frame() {
         finished(task_, true);
@@ -3096,7 +3129,7 @@ class Application {
             } catch (const Error &e) {
                 toast(errorText(e.code, e.what()), danger);
             } catch (const std::exception &e) {
-                toast(e.what(), danger);
+                toast(tr(e.what()), danger);
             }
             ++count;
             if (frames && count >= frames)
@@ -3124,6 +3157,104 @@ class Application {
 };
 
 #ifdef MINESWITCH_UI_TEST
+// README screenshots: real catalog data and a real modpack import (needs network).
+void Application::showcase(const std::string &directory) {
+    auto finish = [this] {
+        frame();
+        Uint32 deadline = SDL_GetTicks() + 900000;
+        while ((task_.active || query_.active) && SDL_GetTicks() < deadline) {
+            frame();
+            draw_.present();
+            SDL_Delay(5);
+        }
+        frame();
+        if (task_.active || query_.active)
+            throw Error("showcase", "worker did not finish");
+    };
+    auto snap = [this, &directory](const std::string &name) {
+        // Icons decode on a worker; give them time, then drop transient toasts.
+        for (int i = 0; i < 150; ++i) {
+            frame();
+            SDL_Delay(20);
+        }
+        toasts_.clear();
+        frame();
+        draw_.screenshot(directory + "/" + name + ".bmp");
+        std::printf("SHOWCASE %s\n", name.c_str());
+    };
+    auto click = [this](const std::string &label) {
+        if (!clickLabel(label))
+            throw Error("showcase", "missing control " + label);
+    };
+    CatalogClient catalog(http_, settings_);
+    auto pack = [&](const std::string &slug) {
+        auto project = catalog.project(Provider::Modrinth, slug);
+        auto versions = catalog.versions(Provider::Modrinth, project.id, "1.21.1");
+        if (versions.empty())
+            throw Error("showcase", "no 1.21.1 version of " + slug);
+        changePage(Page::Catalog);
+        packs_browse_.project = project;
+        downloadPack(versions.front());
+        finish();
+        import();
+        finish();
+        closeDetail();
+    };
+    pack("fabulously-optimized");
+    pack("additive");
+    auto make = [this](const std::string &name, LoaderKind loader, const std::string &version, int icon, std::int64_t played) {
+        Instance item;
+        item.id = newId();
+        item.name = name;
+        item.root = joinPath(storage_.root(), "instances/" + item.id);
+        item.game.minecraft_version = "1.21.1";
+        item.game.loader = {loader, version};
+        item.icon = "preset:" + std::to_string(icon);
+        item.last_played = played;
+        createDirectories(joinPath(item.root, "game/mods"));
+        storage_.saveInstance(item);
+        return item;
+    };
+    auto now = static_cast<std::int64_t>(std::time(nullptr));
+    make("Survival with friends", LoaderKind::Fabric, "0.16.14", 0, now - 3600 * 5);
+    make("Vanilla 1.21.1", LoaderKind::Vanilla, "", 4, now - 86400 * 3);
+    make("Tech pack", LoaderKind::NeoForge, "21.1.242", 2, 0);
+    for (auto item : storage_.listInstances())
+        if (item.name.find("Fabulously") != std::string::npos) {
+            item.last_played = now - 600;
+            storage_.saveInstance(item);
+        }
+    refresh();
+    changePage(Page::Library);
+    snap("library");
+    auto main = std::find_if(instances_.begin(), instances_.end(), [](const Instance &i) { return i.name.find("Fabulously") != std::string::npos; });
+    if (main == instances_.end())
+        throw Error("showcase", "imported pack missing");
+    openInstance(*main);
+    finish();
+    snap("overview");
+    click("tab:Mods");
+    finish();
+    snap("mods");
+    click("+ Add");
+    finish();
+    snap("mod-catalog");
+    back();
+    closeDetail();
+    changePage(Page::Catalog);
+    packs_browse_ = Browse{};
+    packs_browse_.sort = SearchSort::Downloads;
+    search();
+    finish();
+    snap("catalog");
+    changePage(Page::Library);
+    click("+ Create");
+    finish();
+    snap("wizard");
+    wizard_.reset();
+    changePage(Page::Settings);
+    snap("settings");
+}
 void Application::smokeTest(const std::string &archive, const std::string &screenshot) {
     auto check = [](bool value, const char *name) {
         if (!value)
@@ -3167,32 +3298,32 @@ void Application::smokeTest(const std::string &archive, const std::string &scree
     render();
     check(focus_ >= content_start_, "initial focus starts in the page content");
     // New instance through the wizard, offline: the manual version path.
-    click("+ Создать");
+    click("+ Create");
     check(wizard_.has_value(), "create opens the wizard");
     finish();
     snap("wizard");
-    click("Ввести версию вручную");
+    click("Enter version manually");
     check(editing_, "manual version opens keyboard");
     type("1.21.1");
     check(wizard_->minecraft == "1.21.1", "manual version is selected");
-    click("Создать");
+    click("Create");
     check(instances_.size() == 1 && detail_ && detail_->game.minecraft_version == "1.21.1" && !wizard_, "new instance is persisted");
     finish();
     snap("instance");
     // Rename via overview, then the per-instance memory override.
-    click("Переименовать");
+    click("Name");
     type("Тестовая");
     check(storage_.listInstances().front().name == "Тестовая", "rename persists");
-    click("tab:Настройки");
-    click("Память Java");
+    click("tab:Settings");
+    click("Java memory");
     check(modal_.has_value(), "memory opens a menu");
     snap("menu");
-    click("menu:512 МБ");
+    click("menu:512 MB");
     check(!modal_ && detail_->heap_mib == 512 && storage_.listInstances().front().heap_mib == 512, "instance memory override persists");
     // Servers tab writes a real servers.dat that reads back.
-    click("tab:Серверы");
+    click("tab:Servers");
     finish();
-    click("+ Добавить сервер");
+    click("+ Add server");
     type("example.org:25565");
     type("Example");
     finish();
@@ -3202,15 +3333,29 @@ void Application::smokeTest(const std::string &archive, const std::string &scree
     check(!detail_, "back closes the instance");
     // Profiles and global memory.
     changePage(Page::Settings);
-    click("setting:+ Добавить профиль");
+    click("setting:+ Add profile");
     check(editing_, "add profile opens keyboard");
     type("Explorer");
     check(profile().username == "Explorer" && storage_.loadProfiles().size() == 2, "new offline profile selected and saved");
     snap("settings");
     int previous = settings_.heap_mib;
-    click("setting:Память по умолчанию: " + std::to_string(previous) + " МБ");
-    click("menu:768 МБ");
+    click("setting:Default memory: " + std::to_string(previous) + " MB");
+    click("menu:768 MB");
     check(settings_.heap_mib == 768 && storage_.loadSettings().heap_mib == 768, "memory setting persists");
+    // Interface language: Russian applies at once and persists, then back to English.
+    click("setting:Language / Язык: English");
+    check(modal_.has_value(), "language opens a menu");
+    click("menu:Русский");
+    check(language() == Language::Russian && storage_.loadSettings().language == "ru", "Russian language persists");
+    check(hasLabel("Сборки") && !hasLabel("Library") && hasLabel("setting:Память по умолчанию: 768 МБ"), "Russian labels render");
+    snap("settings-ru");
+    changePage(Page::Library);
+    render();
+    check(hasLabel("+ Создать"), "Russian library button");
+    changePage(Page::Settings);
+    click("setting:Language / Язык: Русский");
+    click("menu:English");
+    check(language() == Language::English && storage_.loadSettings().language == "en" && hasLabel("Library"), "English language restored");
     // Import an archive: background inspection while browsing.
     changePage(Page::Files);
     inspect(archive);
@@ -3224,7 +3369,7 @@ void Application::smokeTest(const std::string &archive, const std::string &scree
     check(instances_.size() == 2 && detail_ && detail_->state == InstanceState::NeedsPreparation, "import commits the pack without claiming game readiness");
     check(readTextFile(joinPath(detail_->root, "game/config/example.txt")) == "client settings\n", "client overrides are visible after installation");
     auto imported = *detail_;
-    click("tab:Моды");
+    click("tab:Mods");
     finish();
     check(mods_.size() == 1 && mods_[0].enabled, "instance mod manager reads real JAR metadata");
     snap("mods");
@@ -3234,30 +3379,30 @@ void Application::smokeTest(const std::string &archive, const std::string &scree
     click("mod:fixture.jar.disabled");
     finish();
     check(mods_[0].enabled && pathExists(joinPath(imported.root, "game/mods/fixture.jar")), "UI enable restores mod");
-    click("+ Добавить");
+    click("+ Add");
     check(browsing_content_ && content_browse_.kind == ContentKind::Mod && detail_->game.loader.kind == LoaderKind::Fabric,
           "mod catalog retains instance loader");
     finish();
     snap("catalog");
     back();
     check(detail_ && !browsing_content_ && tab_ == Tab::Mods, "catalog back returns to installed mods");
-    click("tab:Миры");
+    click("tab:Worlds");
     finish();
     check(worlds_.size() == 1 && worlds_[0].name == "Fixture World" && worlds_[0].game_type == 1, "worlds tab reads level.dat");
     snap("worlds");
     click("world:FixtureWorld");
     check(modal_.has_value(), "world opens its menu");
-    click("menu:Создать копию мира");
+    click("menu:Copy world");
     finish();
     check(worlds_.size() == 2, "world copy appears");
-    click("tab:Ресурспаки");
+    click("tab:Resource packs");
     finish();
     check(packs_.size() == 1 && packs_[0].description == "Fixture pack", "resource pack metadata is read");
     snap("packs");
     click("pack:fixture-pack.zip");
     finish();
     check(!packs_[0].enabled, "resource pack disable persists");
-    click("tab:Логи");
+    click("tab:Logs");
     finish();
     check(!logs_.empty(), "logs are listed");
     openLog(logs_.front());
@@ -3275,7 +3420,7 @@ void Application::smokeTest(const std::string &archive, const std::string &scree
     check(pathExists(joinPath(copy.root, "game/mods/fixture.jar")), "copy contains the mods");
     removeInstance(copy);
     check(modal_.has_value(), "delete asks for confirmation");
-    click("menu:Удалить навсегда");
+    click("menu:Delete forever");
     finish();
     check(storage_.listInstances().size() == 2, "confirmed delete removes the copy");
     exportZip(imported);
@@ -3292,9 +3437,9 @@ void Application::smokeTest(const std::string &archive, const std::string &scree
         throw Error("cancelled", "Cancelled");
     });
     changePage(Page::Tasks);
-    click("Отменить");
+    click("Cancel task");
     finish();
-    check(!toasts_.empty() && toasts_.back().text.find("отменена") != std::string::npos, "cancel action reaches the worker and reports completion");
+    check(!toasts_.empty() && toasts_.back().text.find("cancelled") != std::string::npos, "cancel action reaches the worker and reports completion");
     task("Async failure", [](ProgressCallback, const std::atomic_bool *) -> Apply { throw Error("fixture", "Ordinary test job failure"); });
     openInstance(instances_.front());
     finish();
@@ -3308,7 +3453,7 @@ void Application::smokeTest(const std::string &archive, const std::string &scree
     });
     finish();
     check(processor_launch_ && page_ == Page::Tasks && !detail_, "processor preparation review replaces an unrelated detail page");
-    click("Позже");
+    click("Later");
     check(!processor_launch_ && page_ == Page::Library, "processor preparation can be deferred");
     for (bool processors : {false, true}) {
         pending_launch_ = LaunchPlan{};
@@ -3348,7 +3493,7 @@ void Application::smokeTest(const std::string &archive, const std::string &scree
         draw_.screenshot(screenshot);
     draw_.present();
     std::printf("UI_SMOKE_PASS wizard, instance tabs, servers, worlds, packs, logs, mods, copy/delete/export, "
-                "profiles, settings, import, jobs, cancellation, exit precedence\n");
+                "profiles, settings, language, import, jobs, cancellation, exit precedence\n");
 }
 #endif
 
@@ -3422,7 +3567,7 @@ extern "C" int mineswitch_frontend(const char *root, MineSwitchLaunch *launch, i
 int main(int argc, char **argv) {
     std::string root, screenshot;
 #ifdef MINESWITCH_UI_TEST
-    std::string test_archive;
+    std::string test_archive, showcase;
 #endif
     bool preview = false;
     unsigned frames = 0;
@@ -3435,6 +3580,8 @@ int main(int argc, char **argv) {
 #ifdef MINESWITCH_UI_TEST
         else if (a == "--test-archive" && i + 1 < argc)
             test_archive = argv[++i];
+        else if (a == "--showcase" && i + 1 < argc)
+            showcase = argv[++i];
 #endif
         else if (a == "--screenshot" && i + 1 < argc)
             screenshot = argv[++i];
@@ -3454,6 +3601,10 @@ int main(int argc, char **argv) {
 #ifdef MINESWITCH_UI_TEST
         if (!test_archive.empty()) {
             app.smokeTest(test_archive, screenshot);
+            return 0;
+        }
+        if (!showcase.empty()) {
+            app.showcase(showcase);
             return 0;
         }
 #endif

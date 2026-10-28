@@ -1,5 +1,6 @@
 #include "mineswitch/loading.h"
 #include "mineswitch/drawing.hpp"
+#include "mineswitch/i18n.hpp"
 #include <array>
 #include <cstdio>
 #include <exception>
@@ -14,10 +15,10 @@ struct Phase {
     const char *detail;
 };
 constexpr std::array<Phase, 4> phases{{
-    {"Подготовка среды", "Готовим необходимые файлы для запуска."},
-    {"Запуск Java", "Создаём игровую среду."},
-    {"Загрузка клиента", "Запускаем Minecraft."},
-    {"Загрузка игры и модов", "Подождите, пока откроется окно игры."},
+    {"Preparing the environment", "Getting the files needed for launch ready."},
+    {"Starting Java", "Creating the game environment."},
+    {"Loading the client", "Starting Minecraft."},
+    {"Loading the game and mods", "Please wait for the game window to open."},
 }};
 
 std::string display_title(const char *title) {
@@ -58,14 +59,14 @@ class Loading {
         drawing.box({160, 174, 960, 370}, panel);
         drawing.outline({160, 174, 960, 370}, border, 1);
         drawing.text("MINECRAFT JAVA", 208, 215, 17, muted);
-        drawing.text("Запуск Minecraft", 208, 256, 46, foreground, 864);
+        drawing.text(tr("Launching Minecraft"), 208, 256, 46, foreground, 864);
         drawing.text(title, 210, 323, 23, muted, 860);
         drawing.box({208, 378, 864, 1}, border);
 
         const auto &current = phases[static_cast<std::size_t>(phase - 1)];
         drawing.box({210, 419, 8, 8}, accent);
-        drawing.text(current.title, 235, 405, 26, foreground, 680);
-        drawing.text(current.detail, 235, 450, 20, muted, 820);
+        drawing.text(tr(current.title), 235, 405, 26, foreground, 680);
+        drawing.text(tr(current.detail), 235, 450, 20, muted, 820);
 
         // Moving dots indicate activity, not measured completion or a percent.
         const auto active = ((SDL_GetTicks() - started) / 240u) % 4u;
@@ -73,7 +74,7 @@ class Loading {
             const Color color = i == active ? accent : Color{61, 86, 81};
             drawing.box({992 + static_cast<int>(i) * 20, 420, 8, 8}, color);
         }
-        drawing.text("Первый запуск может занять больше времени.", 160, 581, 19, muted, 960);
+        drawing.text(tr("The first launch may take longer."), 160, 581, 19, muted, 960);
 
         if (!screenshot.empty())
             drawing.screenshot(screenshot);

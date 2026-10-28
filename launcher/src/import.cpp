@@ -463,7 +463,7 @@ Instance ArchiveImporter::importArchive(const std::string& path, const ImportOpt
         instance.state = inspected.plan.state;
         if (instance.state != InstanceState::Unsupported) {
             instance.state = json_array_size(missing.get()) ? InstanceState::NeedsFiles : InstanceState::NeedsPreparation;
-            instance.reason = instance.state == InstanceState::NeedsFiles ? "Required pack files are missing" : "Pack files imported; game runtime and loader preparation are still required";
+            instance.reason = instance.state == InstanceState::NeedsFiles ? "Required pack files are missing" : "Pack files are installed; preparation is needed before the first launch";
         } else instance.reason = inspected.plan.notices.empty() ? "Unsupported game or loader requirement" : inspected.plan.notices.front();
         staged.saveInstance(instance);
         Json ready(json_pack("{s:i,s:s,s:s}", "schema", 1, "source_sha256", inspected.plan.source_sha256.c_str(), "state", "complete"), json_decref);

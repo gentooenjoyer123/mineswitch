@@ -122,7 +122,7 @@ ifeq ($(APP_MODE),launcher)
 # Game builds: OpenAL device close must not hang the render thread.
 OBJECTS += $(BUILD)/audio_shutdown.o
 LDFLAGS += -Wl,--wrap=alcCloseDevice
-FRONTEND_SOURCES := drawing frontend http storage import catalog prepare repair loading heap mods nbt content versions images packwiz
+FRONTEND_SOURCES := drawing frontend http storage import catalog prepare repair loading heap mods nbt content versions images packwiz i18n
 OBJECTS += $(addprefix $(BUILD)/frontend-,$(addsuffix .o,$(FRONTEND_SOURCES)))
 # Use the same FreeType implementation as java.desktop in this process.
 FRONTEND_CXXFLAGS := $(ARCH) -D__SWITCH__ -D_GNU_SOURCE -DCURL_STATICLIB -std=gnu++17 \

@@ -15,7 +15,7 @@ Json parse(const std::string &text) {
     json_error_t error{};
     Json value(json_loadb(text.data(), text.size(), 0, &error));
     if (!value)
-        throw Error("versions.invalid", "Некорректный ответ сервера версий");
+        throw Error("versions.invalid", "Invalid response from the version server");
     return value;
 }
 std::string field(json_t *object, const char *key) {
@@ -33,11 +33,11 @@ std::string fetch(HttpClient &http, const std::string &url, std::uint64_t limit,
     request.max_bytes = limit;
     auto response = http.request(request, stop);
     if (stop && stop->load())
-        throw Error("cancelled", "Операция отменена");
+        throw Error("cancelled", "Operation cancelled");
     if (response.status == 404)
         return {};
     if (response.status != 200)
-        throw Error("versions.http", "Сервер версий вернул HTTP " + std::to_string(response.status));
+        throw Error("versions.http", "The version server returned HTTP " + std::to_string(response.status));
     return response.body;
 }
 } // namespace
@@ -85,7 +85,7 @@ std::vector<GameVersion> gameVersions(Storage &storage, HttpClient &http, const 
 std::vector<LoaderVersion> loaderVersions(HttpClient &http, LoaderKind kind, const std::string &mc,
                                           const std::atomic_bool *stop) {
     if (!safeVersion(mc))
-        throw Error("versions.minecraft", "Некорректная версия Minecraft");
+        throw Error("versions.minecraft", "Invalid Minecraft version");
     std::vector<LoaderVersion> result;
     if (kind == LoaderKind::Fabric || kind == LoaderKind::Quilt) {
         auto url = std::string(kind == LoaderKind::Fabric ? "https://meta.fabricmc.net/v2/versions/loader/"

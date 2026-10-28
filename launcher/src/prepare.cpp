@@ -1371,18 +1371,18 @@ std::vector<std::string> parseJvmArguments(const std::string& text) {
     std::string token;
     while (input >> token) {
         for (unsigned char c : token)
-            if (c < 32 || c == 127) throw Error("jvm_args", "JVM-аргументы содержат управляющие символы");
+            if (c < 32 || c == 127) throw Error("jvm_args", "JVM arguments contain control characters");
         bool allowed = token.size() > 2 && token.size() <= 512 &&
             (token.compare(0, 2, "-D") == 0 || token.compare(0, 4, "-XX:") == 0 || token.compare(0, 4, "-Xss") == 0);
-        if (!allowed) throw Error("jvm_args", "Разрешены только -D…, -XX:… и -Xss…: " + token.substr(0, 64));
+        if (!allowed) throw Error("jvm_args", "Only -D…, -XX:… and -Xss… are allowed: " + token.substr(0, 64));
         if (token.find("CodeCache") != std::string::npos && token.compare(0, 4, "-XX:") == 0 &&
             token.find("Reserved") != std::string::npos)
-            throw Error("jvm_args", "Размер JIT-кэша задаёт лаунчер");
+            throw Error("jvm_args", "The launcher sets the JIT cache size");
         if (token.compare(0, 4, "-XX:") == 0 && token.find("GC") != std::string::npos &&
             token.find("Use") != std::string::npos && token != "-XX:+UseSerialGC")
-            throw Error("jvm_args", "В этой Java доступен только SerialGC");
+            throw Error("jvm_args", "Only SerialGC is available in this Java");
         result.push_back(token);
-        if (result.size() > 64) throw Error("jvm_args", "Слишком много JVM-аргументов");
+        if (result.size() > 64) throw Error("jvm_args", "Too many JVM arguments");
     }
     return result;
 }
@@ -1399,7 +1399,7 @@ LaunchPlan GamePreparer::prepare(Instance& instance, const Settings& settings, c
         throw Error("prepare_profile", "Offline username must contain 1..16 letters, digits or underscores");
     const auto heap_budget = currentHeapBudget();
     if (settings.heap_mib < 256 || settings.heap_mib > heap_budget.max_mib)
-        throw Error("prepare_heap", "Максимум Java в этом режиме: " + std::to_string(heap_budget.max_mib) + " МБ");
+        throw Error("prepare_heap", "Java maximum in this mode: " + std::to_string(heap_budget.max_mib) + " MB");
     if (instance.id.empty() || instance.id.size() > 64 || instance.id.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") != std::string::npos)
         throw Error("prepare_instance", "Invalid instance identifier");
     auto expected_root = joinPath(storage_.root(), "instances/" + instance.id);

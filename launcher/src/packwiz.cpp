@@ -428,7 +428,7 @@ PackwizSync syncPackwiz(Storage& storage, HttpClient& http, const Settings& sett
     auto report = [&](const std::string& detail, std::uint32_t done, std::uint32_t total) {
         if (progress) progress({"packwiz", detail, done, total, done, total});
     };
-    report("Чтение pack.toml", 0, 0);
+    report("Reading pack.toml", 0, 0);
     auto pack = parseToml(fetch(http, url, 1024 * 1024, stop));
     if (pack.get("pack-format", "packwiz:1.0.0").rfind("packwiz:", 0) != 0) bad("Unsupported pack-format");
     result.version = pack.get("version");
@@ -457,7 +457,7 @@ PackwizSync syncPackwiz(Storage& storage, HttpClient& http, const Settings& sett
     }
     result.changed = true;
 
-    report("Чтение index.toml", 0, 0);
+    report("Reading index.toml", 0, 0);
     const auto index_url = directoryOf(url) + encodePath(index_file);
     auto index_text = fetch(http, index_url, 16 * 1024 * 1024, stop);
     checkText(index_text, index_format, index_hash, "index.toml");
@@ -496,7 +496,7 @@ PackwizSync syncPackwiz(Storage& storage, HttpClient& http, const Settings& sett
             target.dest = known->second.dest;
             target.preserve = true;
         } else {
-            report("Метаданные: " + target.index_path, step, static_cast<std::uint32_t>(files.size()));
+            report("Metadata: " + target.index_path, step, static_cast<std::uint32_t>(files.size()));
             auto text = fetch(http, file_url, 1024 * 1024, stop);
             checkText(text, format, hash, target.index_path);
             auto meta = parseToml(text);
@@ -549,10 +549,10 @@ PackwizSync syncPackwiz(Storage& storage, HttpClient& http, const Settings& sett
         } else {
             auto free_bytes = storage.availableBytes();
             if (free_bytes < free_margin + target.download.bytes)
-                throw Error("disk_space", "Недостаточно места на SD-карте для файлов сборки");
+                throw Error("disk_space", "Not enough space on the SD card for pack files");
             Download bounded = target.download;
             bounded.max_bytes = std::min<std::uint64_t>(free_bytes - free_margin, 1ULL << 30);
-            if (bounded.bytes > bounded.max_bytes) throw Error("disk_space", "Недостаточно места на SD-карте для файлов сборки");
+            if (bounded.bytes > bounded.max_bytes) throw Error("disk_space", "Not enough space on the SD card for pack files");
             http.download(bounded, part, progress, stop);
             createDirectories(parentOf(final_path));
             // Horizon's rename does not replace; an update keeps a disabled mod disabled.
@@ -575,7 +575,7 @@ PackwizSync syncPackwiz(Storage& storage, HttpClient& http, const Settings& sett
     }
     next.index_hash = applied;
     saveState(instance, next);
-    report("Готово", total, total);
+    report("Done", total, total);
     return result;
 }
 }
