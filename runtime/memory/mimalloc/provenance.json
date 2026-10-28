@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/microsoft/mimalloc",
+  "tag": "v2.2.4",
+  "commit": "fbd8b99c2b828428947d70fdc046bb55609be93e",
+  "license": "MIT",
+  "license_sha256": "82ade5d7d9b029044b5fbbc326207fc47c2d44ee4dd71e8a559c36d728217de9"
+}

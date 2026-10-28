@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "mineswitch_compat",
+  "version": "0.1.1",
+  "name": "MineSwitch Compatibility",
+  "description": "Narrow Horizon adaptations for verified Minecraft mod call sites.",
+  "environment": "client",
+  "entrypoints": {
+    "preLaunch": ["mineswitch.compat.CompatibilityPreLaunch"]
+  },
+  "mixins": ["mineswitch_compat.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "java": ">=21"
+  }
+}

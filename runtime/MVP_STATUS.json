@@ -1,0 +1,66 @@
+{
+  "goal": "Run Minecraft Java 1.21.1 natively on Horizon; controls explicitly deferred",
+  "goal_complete": true,
+  "latest_verified_jvm_log": "logs/mineswitch-jvm-20261006T004427Z.log",
+  "jvm_result": "JNI create and destroy succeeded; 21 real Java checks passed",
+  "switch_ip": "192.168.3.177",
+  "console_state": "Owner closed game and reopened Sphaira; no active Switch run",
+  "next_work": [],
+  "agents": {
+    "/root/jdk_build": "Native AArch64 configure/build, C1/C2 backend compile",
+    "/root/jdk_memory": "Executable CodeMemory/code-cache backend and focused native probe",
+    "/root/jdk_os_core": "Native OS/CPU, StubQueue/codelet/ICStub aliases, SDK-owned stack guardunmap/remap anddiagnostic"
+  },
+  "source_patch": "runtime/patches/openjdk21-horizon.patch",
+  "repro": "runtime/bootstrap-openjdk.py; runtime/configure-horizon.sh; runtime/build-image.sh; runtime/build-launcher.sh",
+  "safety_state": "No empty TCP readiness connections; only complete serialized NXLink deployments; no firmware changes",
+  "build_resource_limit": {
+    "jobs": 6,
+    "wrapper": "runtime/limit-build.py",
+    "nice": 15,
+    "host_java_processors": 6
+  },
+  "mvp_profile": "local profile; offline-mode multiplayer; Microsoft sign-in deferred",
+  "server": {
+    "session_id": null,
+    "address": "192.168.3.163:25576",
+    "eula": "explicit owner acceptance",
+    "state": "Gracefully stopped and world saved at owner-requested goal completion"
+  },
+  "latest_lwjgl_log": "logs/mineswitch-native-minecraft-20261006T053948Z.log",
+  "latest_minecraft_log": "logs/mineswitch-native-minecraft-20261006T054818Z.log",
+  "minecraft_result": "Server login/join08:49:51, owner screenshot of rendered world, stable until owner disconnected09:07:08 (17m17s); zero unhandled native faults in successful run",
+  "client_diagnostics": "ProgressSampler opt-in enabled for development launch; separate Main load and invoke phase markers",
+  "lwjgl_result": "Native HotSpot, 24checks/90frames passed; JNI callbacks, STB, GLSL, GPU readback verified",
+  "latest_file_io_log": "logs/mineswitch-file-io-probe-20261006T025559Z.log",
+  "file_io_result": "62 passed, zero failed; owned-writer metadata/current size/aliases/stat/lstat preserve cursor and native writer exclusion",
+  "previous_minecraft_log": "logs/mineswitch-jvm-20261006T022345Z.log",
+  "priority": "Owner explicitly requests AArch64 HotSpot JIT next, 2026-10-06",
+  "root_work": "Completion evidence recorded; no further builds/deployments requested in this goal",
+  "sha5_candidate": "Host nativecandidate PASS2058 checks, nativecalls3467, JAR integrity/tamper rejection; device test pending, frozen during JIT work",
+  "pending_device_checks": [
+    "Native SHA5 independent vectors/JAR-integrity suite (host candidate validation passed; real client will also verify Mojang JAR)"
+  ],
+  "latest_native_exception_log": "logs/mineswitch-native-exceptions-probe-20261006T035930Z.log",
+  "native_exception_result": "21 passed,0failed; fullregisters and exactdcps1#dead trap;1000fault/resume oncores0/1",
+  "latest_jit_memory_log": "logs/mineswitch-jit-memory-probe-20261006T041229Z.log",
+  "jit_memory_result": "27passed including realARMexecution,PCrelativebranch,RWmetadata andcrosscore repatch;1failedstackguard",
+  "stack_diagnostic_log": "logs/mineswitch-stack-guard-probe-20261006T041808Z.log",
+  "stack_diagnostic_result": "Follow-upmappedstackguardPASS28;ownedworker guardholesfault,remapfromhandler,retryfaultingstore,cleanupandSDKcloseallpassed",
+  "latest_stack_guard_log": "logs/mineswitch-stack-guard-probe-20261006T043128Z.log",
+  "latest_native_vm_log": "logs/mineswitch-jit-20261006T053838Z.log",
+  "native_vm_result": "Device C1/C2 JitProbe each45 passed; NativeContract each31 passed incl real SOE, compiled-loop GC and full stackwalk; JNI create/destroy0",
+  "clock_result": "Direct User+LocalclockIPC confirms2051;Networkclockunavailable0xCC74;nosystemclockchange",
+  "launcher_exit_result": "Public AM SelfController exit now used; owner confirmed HOME without error dialog",
+  "previous_native_minecraft_log": "logs/mineswitch-native-minecraft-20261006T054233Z.log",
+  "standalone_candidate": "runtime/launcher/MineSwitch.nro; APP_MODE=minecraft; mutable /switch/mineswitch/profile.properties; optionalFPS/world metrics",
+  "completion_scope": "Verified native Minecraft Java1.21.1 MVP with real C1/C2, local profile, offline-server world render; controls explicitly deferred; owner requested ending goal after proof",
+  "tested_nro": "runtime/launcher/mineswitch-native-minecraft.nro",
+  "tested_nro_sha256": "9a9adcaca839f6100b4b2694f553531ab8bb1a53c1f2ccb874bcca88779d7f02",
+  "deferred_followups": [
+    "Install and manually verify standalone MineSwitch.nro (built candidate only)",
+    "Measure real FPS with prepared metrics helper",
+    "Controller mod and Microsoft login as requested for later",
+    "Correct console2051 clock through an owner-approved settings action"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "required": false,
+  "minVersion": "0.8.7",
+  "package": "mineswitch.compat.mixin",
+  "plugin": "mineswitch.compat.CompatibilityPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "SodiumFileUtilMixin",
+    "WorldDirectoryMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

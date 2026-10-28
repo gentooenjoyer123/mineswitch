@@ -1,0 +1,125 @@
+--- a/_mallocr.c
++++ b/_mallocr.c
+@@ -277,6 +277,7 @@
+ 
+ #include <stdio.h>    /* needed for malloc_stats */
+ #include <limits.h>   /* needed for overflow checks */
++#include <stdint.h>   /* PTRDIFF_MAX matches signed MORECORE increments */
+ #include <errno.h>    /* needed to set errno to ENOMEM */
+ 
+ #ifdef WIN32
+@@ -2171,8 +2172,18 @@
+ 
+   /* Pad request with top_pad plus minimal overhead */
+   
+-  INTERNAL_SIZE_T    sbrk_size     = nb + top_pad + MINSIZE;
++  INTERNAL_SIZE_T    sbrk_size;
+   unsigned long pagesz    = malloc_getpagesize;
++
++  /* Keep padding and page rounding within the signed MORECORE range.
++     Check before addition so an oversized request cannot become a shrink. */
++  if (nb > (INTERNAL_SIZE_T) PTRDIFF_MAX - MINSIZE - (pagesz - 1) ||
++      top_pad > (INTERNAL_SIZE_T) PTRDIFF_MAX - nb - MINSIZE - (pagesz - 1))
++  {
++    RERRNO = ENOMEM;
++    return;
++  }
++  sbrk_size = nb + top_pad + MINSIZE;
+ 
+   /* If not the first time through, round to preserve page boundary */
+   /* Otherwise, we need to correct to a page size below anyway. */
+@@ -2286,6 +2297,10 @@
+ 
+ #ifdef DEFINE_MALLOC
+ 
++/* Optional diagnostic observer; called before releasing the allocator lock. */
++extern void mineswitch_newlib_allocation_failed(struct _reent*, size_t, size_t)
++  __attribute__((weak));
++
+ /*
+   Malloc Algorthim:
+ 
+@@ -2373,7 +2388,7 @@
+   INTERNAL_SIZE_T nb  = request2size(bytes);  /* padded request size; */
+ 
+   /* Check for overflow and just fail, if so. */
+-  if (nb > INT_MAX || nb < bytes)
++  if (nb > (INTERNAL_SIZE_T) PTRDIFF_MAX - MINSIZE || nb < bytes)
+   {
+     RERRNO = ENOMEM;
+     return 0;
+@@ -2601,6 +2616,8 @@
+     remainder_size = long_sub_size_t(chunksize(top), nb);
+     if (chunksize(top) < nb || remainder_size < (long)MINSIZE)
+     {
++      if (mineswitch_newlib_allocation_failed)
++        mineswitch_newlib_allocation_failed(reent_ptr, bytes, nb);
+       MALLOC_UNLOCK;
+       return 0; /* propagate failure */
+     }
+@@ -2841,9 +2858,10 @@
+   nb = request2size(bytes);
+ 
+   /* Check for overflow and just fail, if so. */
+-  if (nb > INT_MAX || nb < bytes)
++  if (nb > (INTERNAL_SIZE_T) PTRDIFF_MAX - MINSIZE || nb < bytes)
+   {
+     RERRNO = ENOMEM;
++    MALLOC_UNLOCK;
+     return 0;
+   }
+ 
+@@ -3078,7 +3096,8 @@
+   nb = request2size(bytes);
+ 
+   /* Check for overflow. */
+-  if (nb > __SIZE_MAX__ - (alignment + MINSIZE) || nb < bytes)
++  if (alignment > (size_t)PTRDIFF_MAX - MINSIZE ||
++      nb > (size_t)PTRDIFF_MAX - MINSIZE - alignment || nb < bytes)
+   {
+     RERRNO = ENOMEM;
+     return 0;
+@@ -3086,10 +3105,42 @@
+ 
+   m  = (char*)(mALLOc(RCALL nb + alignment + MINSIZE));
+ 
+-  if (m == 0) return 0; /* propagate failure */
++  if (m == 0)
++  {
++    /* The worst-case padding allocation may fail even when an existing
++       free chunk contains a correctly aligned interval. Reuse such a chunk
++       under the same allocator lock; the established leader/tail splitting
++       below retains all normal free/coalescing ownership rules. */
++    if ((alignment & (alignment - 1)) == 0)
++    {
++      int idx;
++      mbinptr bin;
++      mchunkptr candidate, bck, fwd;
++      MALLOC_LOCK;
++      /* Bin 1 is the last remainder, bin 0 is the separately managed top. */
++      for (idx = 1; idx < NAV; ++idx)
++      {
++        bin = bin_at(idx);
++        for (candidate = last(bin); candidate != bin; candidate = candidate->bk)
++        {
++          INTERNAL_SIZE_T size = chunksize(candidate);
++          size_t lead = (-(size_t)chunk2mem(candidate)) & (alignment - 1);
++          if (lead != 0 && lead < MINSIZE) lead += alignment;
++          if (lead > size || nb > size - lead) continue;
++          unlink(candidate, bck, fwd);
++          set_inuse_bit_at_offset(candidate, size);
++          m = (char*)chunk2mem(candidate);
++          goto aligned_chunk_owned;
++        }
++      }
++      MALLOC_UNLOCK;
++    }
++    return 0;
++  }
+ 
+   MALLOC_LOCK;
+ 
++aligned_chunk_owned:
+   p = mem2chunk(m);
+ 
+   if ((((unsigned long)(m)) % alignment) == 0) /* aligned */

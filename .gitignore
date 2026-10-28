@@ -1,0 +1,45 @@
+# Local toolchain, upstream checkouts and research scratch
+.toolchain/
+.upstream/
+.research/
+.minecraft/
+.build-resource.lock
+.cache/
+
+# Device logs, screenshots and session history
+logs/
+codex-history.md
+*.codexbundle
+
+# Build outputs anywhere in the tree
+build/
+build-*/
+generated/
+generated-*/
+__pycache__/
+*.o
+*.a
+*.d
+*.elf
+*.nro
+*.nsp
+*.nca
+*.nacp
+*.map
+*.lst
+*.pyc
+
+# Release artifacts are published as GitHub releases, not committed
+dist/*
+!dist/README.txt
+
+# Mojang code, assets and test worlds are never redistributed
+minecraft/test-server/
+*.jar
+
+# Secrets: maintenance helper token, console keys
+runtime/maintenance/client.json
+*.keys
+prod.keys
+title.keys
+runtime/memory/newlib/vendor/*.tar.gz

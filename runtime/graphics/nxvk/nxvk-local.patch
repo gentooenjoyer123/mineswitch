@@ -1,0 +1,257 @@
+diff --git a/meson.build b/meson.build
+index 8ad07d4..2ddb8c9 100644
+--- a/meson.build
++++ b/meson.build
+@@ -1765,7 +1765,7 @@ ld_args_build_id = cc.get_supported_link_arguments('-Wl,--build-id=sha1')
+ 
+ # check for dl support
+ dep_dl = null_dep
+-if host_machine.system() != 'windows'
++if host_machine.system() not in ['windows', 'horizon']
+   if not cc.has_function('dlopen')
+     dep_dl = cc.find_library('dl', required : true)
+   endif
+diff --git a/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu.h b/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu.h
+index c775e68..3987d1f 100644
+--- a/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu.h
++++ b/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu.h
+@@ -129,6 +129,9 @@ VkResult nvkmd_nvgpu_import_dma_buf(struct nvkmd_dev *dev,
+ 
+ /* Release every backing store the cache is holding. */
+ void nvkmd_nvgpu_mem_cache_trim(struct nvkmd_nvgpu_dev *dev);
++/* Optional application pressure callback: only idle cached stores, never waits
++ * for the cache lock, allocates nothing, and returns physically freed bytes. */
++size_t nvkmd_nvgpu_mem_cache_try_trim(void *dev);
+ 
+ void nvkmd_nvgpu_mem_release(struct nvkmd_nvgpu_mem *mem);
+ 
+diff --git a/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu_dev.c b/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu_dev.c
+index f425cb5..876c9fc 100644
+--- a/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu_dev.c
++++ b/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu_dev.c
+@@ -14,6 +14,10 @@
+ #include <switch/nvidia/gpu.h>
+ #include <switch/result.h>
+ 
++extern bool mineswitch_nxvk_register_cache(void *, size_t (*)(void *))
++   __attribute__((weak));
++extern void mineswitch_nxvk_unregister_cache(void *) __attribute__((weak));
++
+ VkResult
+ nvkmd_nvgpu_create_dev(struct nvkmd_pdev *_pdev,
+                        struct vk_object_base *log_obj,
+@@ -109,6 +113,8 @@ nvkmd_nvgpu_create_dev(struct nvkmd_pdev *_pdev,
+    }
+ 
+    *dev_out = &dev->base;
++   if (mineswitch_nxvk_register_cache)
++      mineswitch_nxvk_register_cache(dev, nvkmd_nvgpu_mem_cache_try_trim);
+ 
+    return VK_SUCCESS;
+ 
+@@ -132,6 +138,9 @@ nvkmd_nvgpu_dev_destroy(struct nvkmd_dev *_dev)
+ {
+    struct nvkmd_nvgpu_dev *dev = nvkmd_nvgpu_dev(_dev);
+ 
++   if (mineswitch_nxvk_unregister_cache)
++      mineswitch_nxvk_unregister_cache(dev);
++
+    if (unlikely(_dev->pdev->debug_flags & NVK_DEBUG_VM)) {
+       fprintf(stderr, "mem cache: %" PRIu64 " hits, %" PRIu64 " misses, "
+                       "%" PRIu32 " entries / 0x%" PRIx64 " bytes held\n",
+diff --git a/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu_mem.c b/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu_mem.c
+index 72e1332..7ba03e2 100644
+--- a/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu_mem.c
++++ b/src/nouveau/vulkan/nvkmd/nvgpu/nvkmd_nvgpu_mem.c
+@@ -22,23 +22,51 @@ struct mem_cache_entry {
+    struct list_head link;
+    NvMap nvmap;
+    uint32_t align_B;
++   bool may_be_alias;
+ };
+ 
++/* Optional allocation-free observer, supplied only by diagnostic launchers.
++ * Events: 1 backing alloc, 2 free, 3 cache put, 4 take, 5 evict, 6 miss.
++ * Observe physical backing here, never its potentially aliased GPU mappings. */
++extern void mineswitch_nxvk_memory_event(unsigned event, uint64_t bytes)
++   __attribute__((weak));
++extern void *mineswitch_nxvk_alloc_cached(size_t bytes, size_t alignment) __attribute__((weak));
++extern bool mineswitch_nxvk_free_cached(void *address) __attribute__((weak));
++static inline void
++memory_observe(unsigned event, uint64_t bytes)
++{
++   if (mineswitch_nxvk_memory_event)
++      mineswitch_nxvk_memory_event(event, bytes);
++}
++
++static void
++cpu_backing_free(void *address)
++{
++   if (!mineswitch_nxvk_free_cached || !mineswitch_nxvk_free_cached(address))
++      align_free(address);
++}
++
+ static void
+ backing_free(NvMap *nvmap)
+ {
+    void *const cpu_addr = nvmap->cpu_addr;
++   const uint64_t bytes = nvmap->size;
+    nvMapClose(nvmap);
+-   align_free(cpu_addr);
++   cpu_backing_free(cpu_addr);
++   memory_observe(2, bytes);
+ }
+ 
+ static bool
+ backing_alloc(uint64_t size_B, uint32_t align_B, uint8_t pte_kind,
+-              bool cpu_cacheable, NvMap *nvmap_out, Result *rc_out)
++              bool cpu_cacheable, bool allow_alias, NvMap *nvmap_out, Result *rc_out)
+ {
+    *rc_out = 0;
+ 
+-   void *cpu_addr = align_malloc(size_B, align_B);
++   void *cpu_addr = NULL;
++   if (cpu_cacheable && allow_alias && mineswitch_nxvk_alloc_cached)
++      cpu_addr = mineswitch_nxvk_alloc_cached(size_B, align_B);
++   if (cpu_addr == NULL)
++      cpu_addr = align_malloc(size_B, align_B);
+    if (cpu_addr == NULL)
+       return false;
+ 
+@@ -48,11 +76,12 @@ backing_alloc(uint64_t size_B, uint32_t align_B, uint8_t pte_kind,
+    Result rc = nvMapCreate(nvmap_out, cpu_addr, size_B, align_B,
+                            (NvKind)pte_kind, cpu_cacheable);
+    if (R_FAILED(rc)) {
+-      align_free(cpu_addr);
++      cpu_backing_free(cpu_addr);
+       *rc_out = rc;
+       return false;
+    }
+ 
++   memory_observe(1, nvmap_out->size);
+    return true;
+ }
+ 
+@@ -77,6 +106,7 @@ mem_cache_trim_locked(struct nvkmd_nvgpu_dev *dev,
+ 
+       dev->mem_cache_size_B -= entry->nvmap.size;
+       dev->mem_cache_count--;
++      memory_observe(5, entry->nvmap.size);
+       list_del(&entry->link);
+       list_addtail(&entry->link, evicted);
+    }
+@@ -95,10 +125,34 @@ nvkmd_nvgpu_mem_cache_trim(struct nvkmd_nvgpu_dev *dev)
+    mem_cache_destroy_list(&evicted);
+ }
+ 
++size_t
++nvkmd_nvgpu_mem_cache_try_trim(void *context)
++{
++   struct nvkmd_nvgpu_dev *dev = context;
++   struct list_head evicted;
++   list_inithead(&evicted);
++   /* Same primitive/state transition as simple_mtx_lock, without waiting.
++    * A failed native allocation may originate under another driver lock. */
++#if UTIL_FUTEX_SUPPORTED
++   if (p_atomic_cmpxchg(&dev->mem_cache_mutex.val, 0, 1) != 0)
++      return 0;
++   HG(ANNOTATE_RWLOCK_ACQUIRED(&dev->mem_cache_mutex, 1));
++#else
++   _simple_mtx_init_with_once(&dev->mem_cache_mutex);
++   if (mtx_trylock(&dev->mem_cache_mutex.mtx) != thrd_success)
++      return 0;
++#endif
++   size_t released = dev->mem_cache_size_B;
++   mem_cache_trim_locked(dev, 0, 0, &evicted);
++   simple_mtx_unlock(&dev->mem_cache_mutex);
++   mem_cache_destroy_list(&evicted);
++   return released;
++}
++
+ static bool
+ mem_cache_take(struct nvkmd_nvgpu_dev *dev,
+                uint64_t size_B, uint32_t align_B, uint8_t pte_kind,
+-               bool cpu_cacheable, NvMap *nvmap_out)
++               bool cpu_cacheable, bool allow_alias, NvMap *nvmap_out)
+ {
+    bool hit = false;
+ 
+@@ -107,11 +161,13 @@ mem_cache_take(struct nvkmd_nvgpu_dev *dev,
+       if (entry->nvmap.size != size_B ||
+           entry->nvmap.kind != (NvKind)pte_kind ||
+           entry->nvmap.is_cpu_cacheable != cpu_cacheable ||
++          (entry->may_be_alias && !allow_alias) ||
+           entry->align_B < align_B)
+          continue;
+ 
+       dev->mem_cache_size_B -= entry->nvmap.size;
+       dev->mem_cache_count--;
++      memory_observe(4, entry->nvmap.size);
+       list_del(&entry->link);
+       *nvmap_out = entry->nvmap;
+       FREE(entry);
+@@ -120,6 +176,8 @@ mem_cache_take(struct nvkmd_nvgpu_dev *dev,
+    }
+    dev->mem_cache_hits += hit;
+    dev->mem_cache_misses += !hit;
++   if (!hit)
++      memory_observe(6, 0);
+    simple_mtx_unlock(&dev->mem_cache_mutex);
+ 
+    return hit;
+@@ -147,6 +205,10 @@ mem_cache_put(struct nvkmd_nvgpu_dev *dev, struct nvkmd_nvgpu_mem *mem)
+ 
+    entry->nvmap = mem->nvmap;
+    entry->align_B = mem->base.bind_align_B;
++   /* A cached store must retain the alias eligibility of its creator. In
++    * particular, never export it later through a SHARED allocation. */
++   entry->may_be_alias = mineswitch_nxvk_alloc_cached && mem->nvmap.is_cpu_cacheable &&
++      !(mem->base.flags & (NVKMD_MEM_SHARED | NVKMD_MEM_COMPRESSED));
+ 
+    struct list_head evicted;
+    list_inithead(&evicted);
+@@ -155,6 +217,7 @@ mem_cache_put(struct nvkmd_nvgpu_dev *dev, struct nvkmd_nvgpu_mem *mem)
+    list_add(&entry->link, &dev->mem_cache);
+    dev->mem_cache_size_B += entry->nvmap.size;
+    dev->mem_cache_count++;
++   memory_observe(3, entry->nvmap.size);
+    mem_cache_trim_locked(dev, NVKMD_NVGPU_MEM_CACHE_MAX_B,
+                          NVKMD_NVGPU_MEM_CACHE_MAX_ENTRIES, &evicted);
+    simple_mtx_unlock(&dev->mem_cache_mutex);
+@@ -278,16 +341,17 @@ nvkmd_nvgpu_alloc_tiled_mem(struct nvkmd_dev *_dev,
+       flags |= NVKMD_MEM_GPU_UNCACHED;
+ 
+    const bool is_cpu_cacheable = !(flags & NVKMD_MEM_CPU_UNCACHED);
++   const bool allow_alias = !(flags & (NVKMD_MEM_SHARED | NVKMD_MEM_COMPRESSED));
+ 
+    NvMap nvmap;
+-   if (!mem_cache_take(dev, size_B, mem_align_B, pte_kind, is_cpu_cacheable,
++   if (!mem_cache_take(dev, size_B, mem_align_B, pte_kind, is_cpu_cacheable, allow_alias,
+                        &nvmap)) {
+       Result rc;
+       if (!backing_alloc(size_B, mem_align_B, pte_kind, is_cpu_cacheable,
+-                         &nvmap, &rc)) {
++                         allow_alias, &nvmap, &rc)) {
+          nvkmd_nvgpu_mem_cache_trim(dev);
+          if (!backing_alloc(size_B, mem_align_B, pte_kind, is_cpu_cacheable,
+-                            &nvmap, &rc)) {
++                            allow_alias, &nvmap, &rc)) {
+             if (R_FAILED(rc)) {
+                return vk_errorf(log_obj, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                                 "nvMapCreate() failed: 0x%x", (unsigned)rc);
+diff --git a/src/util/xmlconfig.c b/src/util/xmlconfig.c
+index 687714a..133760d 100644
+--- a/src/util/xmlconfig.c
++++ b/src/util/xmlconfig.c
+@@ -44,7 +44,10 @@
+ #include <dirent.h>
+ #include <sys/stat.h>
+ #endif
+-#ifdef NO_REGEX
++#if defined(__SWITCH__)
++/* Use the SDK's real POSIX regex provider, including its matching ABI. */
++#include <pcre2posix.h>
++#elif defined(NO_REGEX)
+ typedef int regex_t;
+ #define REG_EXTENDED 0
+ #define REG_NOSUB 0

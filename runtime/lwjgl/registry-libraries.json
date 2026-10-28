@@ -1,0 +1,76 @@
+[
+  {
+    "name": "lwjgl",
+    "archive": "runtime/lwjgl/build/liblwjgl.a",
+    "symbol_patterns": [
+      "^Java_",
+      "^JNI_"
+    ],
+    "required_symbols": [
+      "JNI_OnLoad_lwjgl",
+      "Java_org_lwjgl_system_HorizonLibrary_nOpen",
+      "Java_org_lwjgl_system_libffi_LibFFI_nffi_1prep_1closure_1loc"
+    ],
+    "forced_symbols": [
+      "ffi_closure_alloc",
+      "ffi_closure_free",
+      "ffi_data_to_code_pointer"
+    ]
+  },
+  {
+    "name": "lwjgl_opengl",
+    "archive": "runtime/lwjgl/build/liblwjgl_opengl.a",
+    "symbol_patterns": [
+      "^Java_"
+    ],
+    "required_symbols": [
+      "Java_org_lwjgl_opengl_GL11C_glClearColor",
+      "Java_org_lwjgl_opengl_GL11C_glClear"
+    ]
+  },
+  {
+    "name": "glfw",
+    "archive": "runtime/glfw/build/libglfw3.a",
+    "symbol_patterns": [
+      "^glfw[A-Z]"
+    ],
+    "required_symbols": [
+      "glfwInit",
+      "glfwCreateWindow",
+      "glfwGetProcAddress",
+      "glfwSetErrorCallback"
+    ]
+  },
+  {
+    "name": "GL",
+    "archive": ".toolchain/opt/devkitpro/portlibs/switch/lib/libEGL.a",
+    "symbol_patterns": [
+      "^eglGetProcAddress$"
+    ],
+    "required_symbols": [
+      "eglGetProcAddress"
+    ]
+  },
+  {
+    "name": "lwjgl_stb",
+    "archive": "runtime/lwjgl/build/liblwjgl_stb.a",
+    "symbol_patterns": [
+      "^Java_"
+    ],
+    "required_symbols": [
+      "Java_org_lwjgl_stb_LibSTB_setupMalloc"
+    ]
+  },
+  {
+    "name": "openal",
+    "archive": ".toolchain/opt/devkitpro/portlibs/switch/lib/libopenal.a",
+    "symbol_patterns": [
+      "^alc?[A-Z]"
+    ],
+    "required_symbols": [
+      "alcOpenDevice",
+      "alGetProcAddress",
+      "alcGetProcAddress"
+    ]
+  }
+]

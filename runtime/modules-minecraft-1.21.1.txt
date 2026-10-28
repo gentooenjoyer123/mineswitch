@@ -1,0 +1,18 @@
+# Derived from Minecraft 1.21.1 artifacts; see minecraft-1.21.1-modules.json.
+# Includes observed mod API requirements documented by that report.
+java.base
+java.compiler
+java.desktop
+java.management
+java.naming
+java.net.http
+java.rmi
+java.scripting
+java.security.jgss
+java.sql
+jdk.crypto.ec
+jdk.jfr
+jdk.management
+jdk.naming.dns
+jdk.unsupported
+jdk.zipfs

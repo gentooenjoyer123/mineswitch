@@ -1,0 +1,16 @@
+# Runtime roots: JFR is unavailable in this VM, so let Minecraft select its NoOp profiler.
+java.base
+java.compiler
+java.desktop
+java.management
+java.naming
+java.net.http
+java.rmi
+java.scripting
+java.security.jgss
+java.sql
+jdk.crypto.ec
+jdk.management
+jdk.naming.dns
+jdk.unsupported
+jdk.zipfs

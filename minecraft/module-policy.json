@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "minecraft_version": "1.21.1",
+  "image_profile": "runtime/modules-minecraft-1.21.1.txt",
+  "boot_roots": [
+    "java.base",
+    "java.compiler",
+    "java.desktop",
+    "java.management",
+    "java.naming",
+    "java.net.http",
+    "java.rmi",
+    "java.scripting",
+    "java.security.jgss",
+    "java.sql",
+    "jdk.crypto.ec",
+    "jdk.management",
+    "jdk.naming.dns",
+    "jdk.unsupported",
+    "jdk.zipfs"
+  ],
+  "vm_options": [
+    "--limit-modules=java.base,java.compiler,java.desktop,java.management,java.naming,java.net.http,java.rmi,java.scripting,java.security.jgss,java.sql,jdk.crypto.ec,jdk.management,jdk.naming.dns,jdk.unsupported,jdk.zipfs",
+    "--add-modules=java.base,java.compiler,java.desktop,java.management,java.naming,java.net.http,java.rmi,java.scripting,java.security.jgss,java.sql,jdk.crypto.ec,jdk.management,jdk.naming.dns,jdk.unsupported,jdk.zipfs"
+  ],
+  "excluded_boot_modules": {
+    "jdk.jfr": "The image retains genuine JFR API classes for capability tests. Minecraft bnl (JvmProfiler) selects NoOp only when jdk.jfr is absent from the boot layer; its active profiler reads EventType despite a JFR-disabled VM. Exclude this module from Minecraft's resolved boot roots while native JFR is disabled, or apply an explicit application-side availability gate."
+  },
+  "evidence": {
+    "client_sha1": "30c73b1c5da787909b2f73340419fdf13b9def88",
+    "mojang_classes": {
+      "JvmProfiler": "bnl",
+      "JfrProfiler": "bnk",
+      "NoOpProfiler": "bnl$a"
+    },
+    "host_probe": "logs/minecraft-module-policy-probe.log",
+    "mod_api_requirements": {
+      "java.net.http": {
+        "consumer": "Debugify 1.21.1+1.0 BugFixDescriptionCache / java.net.http.HttpClient",
+        "device_log": "logs/MineSwitch-Launcher-20261006T102342Z.log",
+        "java_version": "21"
+      }
+    }
+  }
+}

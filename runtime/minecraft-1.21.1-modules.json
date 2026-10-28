@@ -1,0 +1,339 @@
+{
+  "schema": 1,
+  "minecraft_version": "1.21.1",
+  "jdk_analysis_version": "21.0.11",
+  "jdeps_options": [
+    "-q",
+    "--multi-release",
+    "21",
+    "--ignore-missing-deps",
+    "--recursive",
+    "--print-module-deps"
+  ],
+  "static_module_roots": [
+    "java.base",
+    "java.compiler",
+    "java.desktop",
+    "java.management",
+    "java.naming",
+    "java.rmi",
+    "java.scripting",
+    "java.security.jgss",
+    "java.sql",
+    "jdk.jfr",
+    "jdk.unsupported"
+  ],
+  "service_roots": {
+    "jdk.crypto.ec": "Elliptic-curve TLS provider for the game's HTTPS authentication and downloads; service loading is not a static bytecode edge.",
+    "jdk.naming.dns": "Minecraft's SRV resolver selects com.sun.jndi.dns.DnsContextFactory by class name.",
+    "jdk.management": "Extended platform MXBeans and device validation use the real Horizon OS/process resource adapter.",
+    "jdk.zipfs": "VanillaPackResourcesBuilder invokes FileSystems.newFileSystem for jar: URLs; ZipFS is a service provider."
+  },
+  "service_callsite_classes": {
+    "jdk.naming.dns": [
+      "gba.class"
+    ],
+    "jdk.zipfs": [
+      "asv.class"
+    ]
+  },
+  "selected_roots": [
+    "java.base",
+    "java.compiler",
+    "java.desktop",
+    "java.management",
+    "java.naming",
+    "java.net.http",
+    "java.rmi",
+    "java.scripting",
+    "java.security.jgss",
+    "java.sql",
+    "jdk.crypto.ec",
+    "jdk.jfr",
+    "jdk.management",
+    "jdk.naming.dns",
+    "jdk.unsupported",
+    "jdk.zipfs"
+  ],
+  "minecraft_boot_roots": [
+    "java.base",
+    "java.compiler",
+    "java.desktop",
+    "java.management",
+    "java.naming",
+    "java.net.http",
+    "java.rmi",
+    "java.scripting",
+    "java.security.jgss",
+    "java.sql",
+    "jdk.crypto.ec",
+    "jdk.management",
+    "jdk.naming.dns",
+    "jdk.unsupported",
+    "jdk.zipfs"
+  ],
+  "conditional_runtime_modules": {
+    "jdk.jfr": "The image retains genuine JFR API classes for capability tests. Minecraft bnl (JvmProfiler) selects NoOp only when jdk.jfr is absent from the boot layer; its active profiler reads EventType despite a JFR-disabled VM. Exclude this module from Minecraft's resolved boot roots while native JFR is disabled, or apply an explicit application-side availability gate."
+  },
+  "inputs": [
+    {
+      "path": ".minecraft/1.21.1/client.jar",
+      "sha1": "30c73b1c5da787909b2f73340419fdf13b9def88",
+      "bytes": 26836906
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/ca/weblite/java-objc-bridge/1.1/java-objc-bridge-1.1.jar",
+      "sha1": "1227f9e0666314f9de41477e3ec277e542ed7f7b",
+      "bytes": 1330045
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/github/oshi/oshi-core/6.4.10/oshi-core-6.4.10.jar",
+      "sha1": "b1d8ab82d11d92fd639b56d639f8f46f739dd5fa",
+      "bytes": 979212
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/google/code/gson/gson/2.10.1/gson-2.10.1.jar",
+      "sha1": "b3add478d4382b78ea20b1671390a858002feb6c",
+      "bytes": 283367
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/google/guava/failureaccess/1.0.1/failureaccess-1.0.1.jar",
+      "sha1": "1dcf1de382a0bf95a3d8b0849546c88bac1292c9",
+      "bytes": 4617
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/google/guava/guava/32.1.2-jre/guava-32.1.2-jre.jar",
+      "sha1": "5e64ec7e056456bef3a4bc4c6fdaef71e8ab6318",
+      "bytes": 3041591
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/ibm/icu/icu4j/73.2/icu4j-73.2.jar",
+      "sha1": "61ad4ef7f9131fcf6d25c34b817f90d6da06c9e9",
+      "bytes": 14567819
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/mojang/authlib/6.0.54/authlib-6.0.54.jar",
+      "sha1": "de8bc95660e1b2fe8793fd427a7a10dcec5b3ea7",
+      "bytes": 115242
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/mojang/blocklist/1.0.10/blocklist-1.0.10.jar",
+      "sha1": "5c685c5ffa94c4cd39496c7184c1d122e515ecef",
+      "bytes": 964
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/mojang/brigadier/1.3.10/brigadier-1.3.10.jar",
+      "sha1": "d15b53a14cf20fdcaa98f731af5dda654452c010",
+      "bytes": 80082
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/mojang/datafixerupper/8.0.16/datafixerupper-8.0.16.jar",
+      "sha1": "67d4de6d7f95d89bcf5862995fb854ebaec02a34",
+      "bytes": 724313
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/mojang/logging/1.2.7/logging-1.2.7.jar",
+      "sha1": "24cb95ffb0e3433fd6e844c04e68009e504ca1c0",
+      "bytes": 15343
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/mojang/patchy/2.2.10/patchy-2.2.10.jar",
+      "sha1": "da05971b07cbb379d002cf7eaec6a2048211fefc",
+      "bytes": 4439
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/com/mojang/text2speech/1.17.9/text2speech-1.17.9.jar",
+      "sha1": "3cad216e3a7f0c19b4b394388bc9ffc446f13b14",
+      "bytes": 12243
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/commons-codec/commons-codec/1.16.0/commons-codec-1.16.0.jar",
+      "sha1": "4e3eb3d79888d76b54e28b350915b5dc3919c9de",
+      "bytes": 360738
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/commons-io/commons-io/2.15.1/commons-io-2.15.1.jar",
+      "sha1": "f11560da189ab563a5c8e351941415430e9304ea",
+      "bytes": 501218
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/commons-logging/commons-logging/1.2/commons-logging-1.2.jar",
+      "sha1": "4bfc12adfe4842bf07b657f0369c4cb522955686",
+      "bytes": 61829
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/io/netty/netty-buffer/4.1.97.Final/netty-buffer-4.1.97.Final.jar",
+      "sha1": "f8f3d8644afa5e6e1a40a3a6aeb9d9aa970ecb4f",
+      "bytes": 306590
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/io/netty/netty-codec/4.1.97.Final/netty-codec-4.1.97.Final.jar",
+      "sha1": "384ba4d75670befbedb45c4d3b497a93639c206d",
+      "bytes": 345274
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/io/netty/netty-common/4.1.97.Final/netty-common-4.1.97.Final.jar",
+      "sha1": "7cceacaf11df8dc63f23d0fb58e9d4640fc88404",
+      "bytes": 659930
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/io/netty/netty-handler/4.1.97.Final/netty-handler-4.1.97.Final.jar",
+      "sha1": "abb86c6906bf512bf2b797a41cd7d2e8d3cd7c36",
+      "bytes": 560040
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/io/netty/netty-resolver/4.1.97.Final/netty-resolver-4.1.97.Final.jar",
+      "sha1": "cec8348108dc76c47cf87c669d514be52c922144",
+      "bytes": 37792
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/io/netty/netty-transport-classes-epoll/4.1.97.Final/netty-transport-classes-epoll-4.1.97.Final.jar",
+      "sha1": "795da37ded759e862457a82d9d92c4d39ce8ecee",
+      "bytes": 147139
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/io/netty/netty-transport-native-epoll/4.1.97.Final/netty-transport-native-epoll-4.1.97.Final-linux-aarch_64.jar",
+      "sha1": "5514744c588190ffda076b35a9b8c9f24946a960",
+      "bytes": 40427
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/io/netty/netty-transport-native-epoll/4.1.97.Final/netty-transport-native-epoll-4.1.97.Final-linux-x86_64.jar",
+      "sha1": "54188f271e388e7f313aea995e82f58ce2cdb809",
+      "bytes": 38954
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/io/netty/netty-transport-native-unix-common/4.1.97.Final/netty-transport-native-unix-common-4.1.97.Final.jar",
+      "sha1": "d469d84265ab70095b01b40886cabdd433b6e664",
+      "bytes": 43897
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/io/netty/netty-transport/4.1.97.Final/netty-transport-4.1.97.Final.jar",
+      "sha1": "f37380d23c9bb079bc702910833b2fd532c9abd0",
+      "bytes": 489624
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/it/unimi/dsi/fastutil/8.5.12/fastutil-8.5.12.jar",
+      "sha1": "c24946d46824bd528054bface3231d2ecb7e95e8",
+      "bytes": 23326598
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/net/java/dev/jna/jna-platform/5.14.0/jna-platform-5.14.0.jar",
+      "sha1": "28934d48aed814f11e4c584da55c49fa7032b31b",
+      "bytes": 1369287
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/net/java/dev/jna/jna/5.14.0/jna-5.14.0.jar",
+      "sha1": "67bf3eaea4f0718cb376a181a629e5f88fa1c9dd",
+      "bytes": 1878533
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/net/sf/jopt-simple/jopt-simple/5.0.4/jopt-simple-5.0.4.jar",
+      "sha1": "4fdac2fbe92dfad86aa6e9301736f6b4342a3f5c",
+      "bytes": 78146
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/apache/commons/commons-compress/1.26.0/commons-compress-1.26.0.jar",
+      "sha1": "659feffdd12280201c8aacb8f7be94f9a883c824",
+      "bytes": 1078328
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/apache/commons/commons-lang3/3.14.0/commons-lang3-3.14.0.jar",
+      "sha1": "1ed471194b02f2c6cb734a0cd6f6f107c673afae",
+      "bytes": 657952
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/apache/httpcomponents/httpclient/4.5.13/httpclient-4.5.13.jar",
+      "sha1": "e5f6cae5ca7ecaac1ec2827a9e2d65ae2869cada",
+      "bytes": 780321
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/apache/httpcomponents/httpcore/4.4.16/httpcore-4.4.16.jar",
+      "sha1": "51cf043c87253c9f58b539c9f7e44c8894223850",
+      "bytes": 327891
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/apache/logging/log4j/log4j-api/2.22.1/log4j-api-2.22.1.jar",
+      "sha1": "bea6fede6328fabafd7e68363161a7ea6605abd1",
+      "bytes": 335001
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/apache/logging/log4j/log4j-core/2.22.1/log4j-core-2.22.1.jar",
+      "sha1": "7183a25510a02ad00cc6a95d3b3d2a7d3c5a8dc4",
+      "bytes": 1900022
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/apache/logging/log4j/log4j-slf4j2-impl/2.22.1/log4j-slf4j2-impl-2.22.1.jar",
+      "sha1": "d7e6693c2606cb7e7335047d7bb96dec52db5665",
+      "bytes": 27364
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/jcraft/jorbis/0.0.17/jorbis-0.0.17.jar",
+      "sha1": "8872d22b293e8f5d7d56ff92be966e6dc28ebdc6",
+      "bytes": 99701
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/joml/joml/1.10.5/joml-1.10.5.jar",
+      "sha1": "22566d58af70ad3d72308bab63b8339906deb649",
+      "bytes": 712082
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/lwjgl/lwjgl-freetype/3.3.3/lwjgl-freetype-3.3.3.jar",
+      "sha1": "a0db6c84a8becc8ca05f9dbfa985edc348a824c7",
+      "bytes": 450896
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/lwjgl/lwjgl-glfw/3.3.3/lwjgl-glfw-3.3.3.jar",
+      "sha1": "efa1eb78c5ccd840e9f329717109b5e892d72f8e",
+      "bytes": 135546
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/lwjgl/lwjgl-jemalloc/3.3.3/lwjgl-jemalloc-3.3.3.jar",
+      "sha1": "b543467b7ff3c6920539a88ee602d34098628be5",
+      "bytes": 43896
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/lwjgl/lwjgl-openal/3.3.3/lwjgl-openal-3.3.3.jar",
+      "sha1": "daada81ceb5fc0c291fbfdd4433cb8d9423577f2",
+      "bytes": 110586
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/lwjgl/lwjgl-opengl/3.3.3/lwjgl-opengl-3.3.3.jar",
+      "sha1": "02f6b0147078396a58979125a4c947664e98293a",
+      "bytes": 929192
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/lwjgl/lwjgl-stb/3.3.3/lwjgl-stb-3.3.3.jar",
+      "sha1": "25dd6161988d7e65f71d5065c99902402ee32746",
+      "bytes": 120283
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/lwjgl/lwjgl-tinyfd/3.3.3/lwjgl-tinyfd-3.3.3.jar",
+      "sha1": "82d755ca94b102e9ca77283b9e2dc46d1b15fbe5",
+      "bytes": 13400
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3.jar",
+      "sha1": "29589b5f87ed335a6c7e7ee6a5775f81f97ecb84",
+      "bytes": 785029
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/lz4/lz4-java/1.8.0/lz4-java-1.8.0.jar",
+      "sha1": "4b986a99445e49ea5fbf5d149c4b63f6ed6c6780",
+      "bytes": 682804
+    },
+    {
+      "path": ".minecraft/1.21.1/libraries/org/slf4j/slf4j-api/2.0.9/slf4j-api-2.0.9.jar",
+      "sha1": "7cf2726fdcfbc8610f9a71fb3ed639871f315340",
+      "bytes": 64579
+    }
+  ],
+  "limitations": [
+    "Static jdeps analysis does not discover arbitrary reflection or application-selected service providers.",
+    "--ignore-missing-deps allows optional third-party integrations; it is not proof those integrations work.",
+    "The classpath inventory includes OS-specific optional Java jars; native classifiers are not target binaries.",
+    "The image builder derives transitive closure from the target module descriptors and records it separately."
+  ],
+  "mod_api_roots": {
+    "java.net.http": "Debugify 1.21.1+1.0 BugFixDescriptionCache uses the genuine Java21 HttpClient API; observed in logs/MineSwitch-Launcher-20261006T102342Z.log."
+  }
+}

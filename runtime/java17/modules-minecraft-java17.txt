@@ -1,0 +1,21 @@
+# Java 17 runtime profile for Minecraft 1.17-1.20.4 (Java 17 era clients).
+# Starts from the verified 1.21.1 closure (runtime/modules-minecraft-1.21.1.txt);
+# these clients use the same library families (LWJGL 3.2.x/3.3.x, Netty, Guava,
+# log4j2, OSHI, authlib, Brigadier, DataFixerUpper). Re-derive with
+# runtime/analyze-minecraft-modules.py against the actual target client jars.
+java.base
+java.compiler
+java.desktop
+java.management
+java.naming
+java.net.http
+java.rmi
+java.scripting
+java.security.jgss
+java.sql
+jdk.crypto.ec
+jdk.jfr
+jdk.management
+jdk.naming.dns
+jdk.unsupported
+jdk.zipfs

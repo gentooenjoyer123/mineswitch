@@ -1,0 +1,14 @@
+{
+  "missing_required_bindings": [
+    "glfwGetPlatform",
+    "glfwInitAllocator",
+    "glfwPlatformSupported"
+  ],
+  "client_constant_pool_hits": {
+    "glfwGetPlatform": [
+      "fam.class"
+    ],
+    "glfwInitAllocator": [],
+    "glfwPlatformSupported": []
+  }
+}

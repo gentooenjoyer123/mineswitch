@@ -1,0 +1,10 @@
+{
+  "version": "1.21.1",
+  "mode": "offline",
+  "username": "MineSwitch",
+  "heap_mib": 1500,
+  "width": 1280,
+  "height": 720,
+  "quick_play_server": "192.168.3.163:25576",
+  "adapt_controllers": false
+}

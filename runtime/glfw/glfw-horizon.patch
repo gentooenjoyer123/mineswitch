@@ -1,0 +1,1835 @@
+diff --git a/include/GLFW/glfw3.h b/include/GLFW/glfw3.h
+index c8d7cfa..90bb745 100644
+--- a/include/GLFW/glfw3.h
++++ b/include/GLFW/glfw3.h
+@@ -1791,6 +1791,23 @@ typedef struct GLFWgamepadstate
+  *
+  *  @ingroup init
+  */
++/* MineSwitch backport of the GLFW 3.4 allocator and platform-query API.
++ * The underlying Switch backend remains GLFW 3.3.4; this is not another OS.
++ */
++typedef void* (*GLFWallocatefun)(size_t size, void* user);
++typedef void* (*GLFWreallocatefun)(void* block, size_t size, void* user);
++typedef void (*GLFWdeallocatefun)(void* block, void* user);
++typedef struct GLFWallocator {
++    GLFWallocatefun allocate;
++    GLFWreallocatefun reallocate;
++    GLFWdeallocatefun deallocate;
++    void* user;
++} GLFWallocator;
++#define GLFW_PLATFORM_HORIZON 0x00060006
++GLFWAPI void glfwInitAllocator(const GLFWallocator* allocator);
++GLFWAPI int glfwGetPlatform(void);
++GLFWAPI int glfwPlatformSupported(int platform);
++
+ GLFWAPI int glfwInit(void);
+ 
+ /*! @brief Terminates the GLFW library.
+diff --git a/src/context.c b/src/context.c
+index 867e399..7d586da 100644
+--- a/src/context.c
++++ b/src/context.c
+@@ -35,6 +35,9 @@
+ #include <limits.h>
+ #include <stdio.h>
+ 
++#if defined(_GLFW_SWITCH)
++extern void mineswitch_glfw_frame_presented(void) __attribute__((weak));
++#endif
+ 
+ //////////////////////////////////////////////////////////////////////////
+ //////                       GLFW internal API                      //////
+@@ -655,6 +658,10 @@ GLFWAPI void glfwSwapBuffers(GLFWwindow* handle)
+     }
+ 
+     window->context.swapBuffers(window);
++#if defined(_GLFW_SWITCH)
++    if (mineswitch_glfw_frame_presented)
++        mineswitch_glfw_frame_presented();
++#endif
+ }
+ 
+ GLFWAPI void glfwSwapInterval(int interval)
+@@ -757,4 +764,3 @@ GLFWAPI GLFWglproc glfwGetProcAddress(const char* procname)
+ 
+     return window->context.getProcAddress(procname);
+ }
+-
+diff --git a/src/egl_context.c b/src/egl_context.c
+index 3965da2..010bd8e 100644
+--- a/src/egl_context.c
++++ b/src/egl_context.c
+@@ -103,10 +103,10 @@ static GLFWbool chooseEGLConfig(const _GLFWctxconfig* ctxconfig,
+         return GLFW_FALSE;
+     }
+ 
+-    nativeConfigs = calloc(nativeCount, sizeof(EGLConfig));
++    nativeConfigs = _glfw_calloc(nativeCount, sizeof(EGLConfig));
+     eglGetConfigs(_glfw.egl.display, nativeConfigs, nativeCount, &nativeCount);
+ 
+-    usableConfigs = calloc(nativeCount, sizeof(_GLFWfbconfig));
++    usableConfigs = _glfw_calloc(nativeCount, sizeof(_GLFWfbconfig));
+     usableCount = 0;
+ 
+     for (i = 0;  i < nativeCount;  i++)
+@@ -183,8 +183,8 @@ static GLFWbool chooseEGLConfig(const _GLFWctxconfig* ctxconfig,
+     if (closest)
+         *result = (EGLConfig) closest->handle;
+ 
+-    free(nativeConfigs);
+-    free(usableConfigs);
++    _glfw_free(nativeConfigs);
++    _glfw_free(usableConfigs);
+ 
+     return closest != NULL;
+ }
+diff --git a/src/glx_context.c b/src/glx_context.c
+index fbbb897..0e8342d 100644
+--- a/src/glx_context.c
++++ b/src/glx_context.c
+@@ -73,7 +73,7 @@ static GLFWbool chooseGLXFBConfig(const _GLFWfbconfig* desired,
+         return GLFW_FALSE;
+     }
+ 
+-    usableConfigs = calloc(nativeCount, sizeof(_GLFWfbconfig));
++    usableConfigs = _glfw_calloc(nativeCount, sizeof(_GLFWfbconfig));
+     usableCount = 0;
+ 
+     for (i = 0;  i < nativeCount;  i++)
+@@ -137,7 +137,7 @@ static GLFWbool chooseGLXFBConfig(const _GLFWfbconfig* desired,
+         *result = (GLXFBConfig) closest->handle;
+ 
+     XFree(nativeConfigs);
+-    free(usableConfigs);
++    _glfw_free(usableConfigs);
+ 
+     return closest != NULL;
+ }
+diff --git a/src/init.c b/src/init.c
+index 8706b22..219cabb 100644
+--- a/src/init.c
++++ b/src/init.c
+@@ -50,6 +50,11 @@ _GLFWlibrary _glfw = { GLFW_FALSE };
+ // These are outside of _glfw so they can be used before initialization and
+ // after termination
+ //
++static GLFWallocator _glfwInitAllocator;
++static void* defaultAllocate(size_t size, void* user) { (void)user; return malloc(size); }
++static void* defaultReallocate(void* block, size_t size, void* user) { (void)user; return realloc(block,size); }
++static void defaultDeallocate(void* block, void* user) { (void)user; free(block); }
++
+ static _GLFWerror _glfwMainThreadError;
+ static GLFWerrorfun _glfwErrorCallback;
+ static _GLFWinitconfig _glfwInitHints =
+@@ -83,11 +88,11 @@ static void terminate(void)
+         _glfwFreeMonitor(monitor);
+     }
+ 
+-    free(_glfw.monitors);
++    _glfw_free(_glfw.monitors);
+     _glfw.monitors = NULL;
+     _glfw.monitorCount = 0;
+ 
+-    free(_glfw.mappings);
++    _glfw_free(_glfw.mappings);
+     _glfw.mappings = NULL;
+     _glfw.mappingCount = 0;
+ 
+@@ -100,7 +105,7 @@ static void terminate(void)
+     {
+         _GLFWerror* error = _glfw.errorListHead;
+         _glfw.errorListHead = error->next;
+-        free(error);
++        _glfw_free(error);
+     }
+ 
+     _glfwPlatformDestroyTls(&_glfw.contextSlot);
+@@ -115,10 +120,45 @@ static void terminate(void)
+ //////                       GLFW internal API                      //////
+ //////////////////////////////////////////////////////////////////////////
+ 
++// Allocator behavior follows GLFW 3.4's init.c implementation.
++void* _glfw_malloc(size_t size)
++{
++    void* block;
++    if (!size) return NULL;
++    block = _glfw.allocator.allocate(size, _glfw.allocator.user);
++    if (!block) _glfwInputError(GLFW_OUT_OF_MEMORY, NULL);
++    return block;
++}
++void* _glfw_calloc(size_t count, size_t size)
++{
++    void* block;
++    if (!count || !size) return NULL;
++    if (count > SIZE_MAX / size)
++    {
++        _glfwInputError(GLFW_INVALID_VALUE, "Allocation size overflow");
++        return NULL;
++    }
++    block = _glfw_malloc(count * size);
++    return block ? memset(block, 0, count * size) : NULL;
++}
++void* _glfw_realloc(void* block, size_t size)
++{
++    void* resized;
++    if (!block) return _glfw_calloc(1, size);
++    if (!size) { _glfw_free(block); return NULL; }
++    resized = _glfw.allocator.reallocate(block, size, _glfw.allocator.user);
++    if (!resized) _glfwInputError(GLFW_OUT_OF_MEMORY, NULL);
++    return resized;
++}
++void _glfw_free(void* block)
++{
++    if (block) _glfw.allocator.deallocate(block, _glfw.allocator.user);
++}
++
+ char* _glfw_strdup(const char* source)
+ {
+     const size_t length = strlen(source);
+-    char* result = calloc(length + 1, 1);
++    char* result = _glfw_calloc(length + 1, 1);
+     strcpy(result, source);
+     return result;
+ }
+@@ -200,7 +240,7 @@ void _glfwInputError(int code, const char* format, ...)
+         error = _glfwPlatformGetTls(&_glfw.errorSlot);
+         if (!error)
+         {
+-            error = calloc(1, sizeof(_GLFWerror));
++            error = _glfw_calloc(1, sizeof(_GLFWerror));
+             _glfwPlatformSetTls(&_glfw.errorSlot, error);
+             _glfwPlatformLockMutex(&_glfw.errorLock);
+             error->next = _glfw.errorListHead;
+@@ -230,6 +270,14 @@ GLFWAPI int glfwInit(void)
+ 
+     memset(&_glfw, 0, sizeof(_glfw));
+     _glfw.hints.init = _glfwInitHints;
++    _glfw.allocator = _glfwInitAllocator;
++    if (!_glfw.allocator.allocate)
++    {
++        _glfw.allocator.allocate = defaultAllocate;
++        _glfw.allocator.reallocate = defaultReallocate;
++        _glfw.allocator.deallocate = defaultDeallocate;
++    }
++
+ 
+     if (!_glfwPlatformInit())
+     {
+@@ -265,6 +313,12 @@ GLFWAPI int glfwInit(void)
+             }
+         }
+     }
++#else
++    if (!_glfwInitSwitchGamepadMappings())
++    {
++        terminate();
++        return GLFW_FALSE;
++    }
+ #endif
+ 
+     return GLFW_TRUE;
+@@ -297,6 +351,27 @@ GLFWAPI void glfwInitHint(int hint, int value)
+                     "Invalid init hint 0x%08X", hint);
+ }
+ 
++GLFWAPI void glfwInitAllocator(const GLFWallocator* allocator)
++{
++    // Like 3.4, changes affect the next initialization, not live allocations.
++    if (!allocator) memset(&_glfwInitAllocator, 0, sizeof(_glfwInitAllocator));
++    else if (allocator->allocate && allocator->reallocate && allocator->deallocate)
++        _glfwInitAllocator = *allocator;
++    else _glfwInputError(GLFW_INVALID_VALUE, "Missing function in allocator");
++}
++GLFWAPI int glfwGetPlatform(void)
++{
++    _GLFW_REQUIRE_INIT_OR_RETURN(0);
++    return GLFW_PLATFORM_HORIZON;
++}
++GLFWAPI int glfwPlatformSupported(int platform)
++{
++    if (platform == GLFW_PLATFORM_HORIZON) return GLFW_TRUE;
++    if (platform >= 0x00060001 && platform <= 0x00060005) return GLFW_FALSE;
++    _glfwInputError(GLFW_INVALID_ENUM, "Invalid platform 0x%08X", platform);
++    return GLFW_FALSE;
++}
++
+ GLFWAPI void glfwGetVersion(int* major, int* minor, int* rev)
+ {
+     if (major != NULL)
+diff --git a/src/input.c b/src/input.c
+index 4467435..f4f4c95 100644
+--- a/src/input.c
++++ b/src/input.c
+@@ -43,7 +43,6 @@
+ #define _GLFW_JOYSTICK_BUTTON   2
+ #define _GLFW_JOYSTICK_HATBIT   3
+ 
+-#if !defined(_GLFW_SWITCH)
+ 
+ // Finds a mapping based on joystick GUID
+ //
+@@ -253,7 +252,6 @@ static GLFWbool parseMapping(_GLFWmapping* mapping, const char* string)
+     return GLFW_TRUE;
+ }
+ 
+-#endif
+ 
+ 
+ //////////////////////////////////////////////////////////////////////////
+@@ -435,17 +433,15 @@ _GLFWjoystick* _glfwAllocJoystick(const char* name,
+     js = _glfw.joysticks + jid;
+     js->present     = GLFW_TRUE;
+     js->name        = _glfw_strdup(name);
+-    js->axes        = calloc(axisCount, sizeof(float));
+-    js->buttons     = calloc(buttonCount + (size_t) hatCount * 4, 1);
+-    js->hats        = calloc(hatCount, 1);
++    js->axes        = _glfw_calloc(axisCount, sizeof(float));
++    js->buttons     = _glfw_calloc(buttonCount + (size_t) hatCount * 4, 1);
++    js->hats        = _glfw_calloc(hatCount, 1);
+     js->axisCount   = axisCount;
+     js->buttonCount = buttonCount;
+     js->hatCount    = hatCount;
+ 
+     strncpy(js->guid, guid, sizeof(js->guid) - 1);
+-#if !defined(_GLFW_SWITCH)
+     js->mapping = findValidMapping(js);
+-#endif
+ 
+     return js;
+ }
+@@ -454,10 +450,10 @@ _GLFWjoystick* _glfwAllocJoystick(const char* name,
+ //
+ void _glfwFreeJoystick(_GLFWjoystick* js)
+ {
+-    free(js->name);
+-    free(js->axes);
+-    free(js->buttons);
+-    free(js->hats);
++    _glfw_free(js->name);
++    _glfw_free(js->axes);
++    _glfw_free(js->buttons);
++    _glfw_free(js->hats);
+     memset(js, 0, sizeof(_GLFWjoystick));
+ }
+ 
+@@ -741,7 +737,7 @@ GLFWAPI GLFWcursor* glfwCreateCursor(const GLFWimage* image, int xhot, int yhot)
+ 
+     _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+ 
+-    cursor = calloc(1, sizeof(_GLFWcursor));
++    cursor = _glfw_calloc(1, sizeof(_GLFWcursor));
+     cursor->next = _glfw.cursorListHead;
+     _glfw.cursorListHead = cursor;
+ 
+@@ -771,7 +767,7 @@ GLFWAPI GLFWcursor* glfwCreateStandardCursor(int shape)
+         return NULL;
+     }
+ 
+-    cursor = calloc(1, sizeof(_GLFWcursor));
++    cursor = _glfw_calloc(1, sizeof(_GLFWcursor));
+     cursor->next = _glfw.cursorListHead;
+     _glfw.cursorListHead = cursor;
+ 
+@@ -816,7 +812,7 @@ GLFWAPI void glfwDestroyCursor(GLFWcursor* handle)
+         *prev = cursor->next;
+     }
+ 
+-    free(cursor);
++    _glfw_free(cursor);
+ }
+ 
+ GLFWAPI void glfwSetCursor(GLFWwindow* windowHandle, GLFWcursor* cursorHandle)
+@@ -1120,7 +1116,6 @@ GLFWAPI GLFWjoystickfun glfwSetJoystickCallback(GLFWjoystickfun cbfun)
+ 
+ GLFWAPI int glfwUpdateGamepadMappings(const char* string)
+ {
+-#if !defined(_GLFW_SWITCH)
+     int jid;
+     const char* c = string;
+ 
+@@ -1153,7 +1148,7 @@ GLFWAPI int glfwUpdateGamepadMappings(const char* string)
+                     {
+                         _glfw.mappingCount++;
+                         _glfw.mappings =
+-                            realloc(_glfw.mappings,
++                            _glfw_realloc(_glfw.mappings,
+                                     sizeof(_GLFWmapping) * _glfw.mappingCount);
+                         _glfw.mappings[_glfw.mappingCount - 1] = mapping;
+                     }
+@@ -1175,7 +1170,6 @@ GLFWAPI int glfwUpdateGamepadMappings(const char* string)
+         if (js->present)
+             js->mapping = findValidMapping(js);
+     }
+-#endif
+ 
+     return GLFW_TRUE;
+ }
+diff --git a/src/internal.h b/src/internal.h
+index b607cbb..fd683db 100644
+--- a/src/internal.h
++++ b/src/internal.h
+@@ -515,6 +515,7 @@ struct _GLFWmutex
+ //
+ struct _GLFWlibrary
+ {
++    GLFWallocator allocator;
+     GLFWbool            initialized;
+ 
+     struct {
+@@ -776,6 +777,10 @@ GLFWbool _glfwInitVulkan(int mode);
+ void _glfwTerminateVulkan(void);
+ const char* _glfwGetVulkanResultString(VkResult result);
+ 
++void* _glfw_malloc(size_t size);
++void* _glfw_calloc(size_t count, size_t size);
++void* _glfw_realloc(void* block, size_t size);
++void _glfw_free(void* block);
+ char* _glfw_strdup(const char* source);
+ float _glfw_fminf(float a, float b);
+ float _glfw_fmaxf(float a, float b);
+diff --git a/src/monitor.c b/src/monitor.c
+index c6bcfd3..d3ad4f4 100644
+--- a/src/monitor.c
++++ b/src/monitor.c
+@@ -80,7 +80,7 @@ static GLFWbool refreshVideoModes(_GLFWmonitor* monitor)
+ 
+     qsort(modes, modeCount, sizeof(GLFWvidmode), compareVideoModes);
+ 
+-    free(monitor->modes);
++    _glfw_free(monitor->modes);
+     monitor->modes = modes;
+     monitor->modeCount = modeCount;
+ 
+@@ -100,7 +100,7 @@ void _glfwInputMonitor(_GLFWmonitor* monitor, int action, int placement)
+     {
+         _glfw.monitorCount++;
+         _glfw.monitors =
+-            realloc(_glfw.monitors, sizeof(_GLFWmonitor*) * _glfw.monitorCount);
++            _glfw_realloc(_glfw.monitors, sizeof(_GLFWmonitor*) * _glfw.monitorCount);
+ 
+         if (placement == _GLFW_INSERT_FIRST)
+         {
+@@ -166,7 +166,7 @@ void _glfwInputMonitorWindow(_GLFWmonitor* monitor, _GLFWwindow* window)
+ //
+ _GLFWmonitor* _glfwAllocMonitor(const char* name, int widthMM, int heightMM)
+ {
+-    _GLFWmonitor* monitor = calloc(1, sizeof(_GLFWmonitor));
++    _GLFWmonitor* monitor = _glfw_calloc(1, sizeof(_GLFWmonitor));
+     monitor->widthMM = widthMM;
+     monitor->heightMM = heightMM;
+ 
+@@ -188,18 +188,18 @@ void _glfwFreeMonitor(_GLFWmonitor* monitor)
+     _glfwFreeGammaArrays(&monitor->originalRamp);
+     _glfwFreeGammaArrays(&monitor->currentRamp);
+ 
+-    free(monitor->modes);
+-    free(monitor->name);
+-    free(monitor);
++    _glfw_free(monitor->modes);
++    _glfw_free(monitor->name);
++    _glfw_free(monitor);
+ }
+ 
+ // Allocates red, green and blue value arrays of the specified size
+ //
+ void _glfwAllocGammaArrays(GLFWgammaramp* ramp, unsigned int size)
+ {
+-    ramp->red = calloc(size, sizeof(unsigned short));
+-    ramp->green = calloc(size, sizeof(unsigned short));
+-    ramp->blue = calloc(size, sizeof(unsigned short));
++    ramp->red = _glfw_calloc(size, sizeof(unsigned short));
++    ramp->green = _glfw_calloc(size, sizeof(unsigned short));
++    ramp->blue = _glfw_calloc(size, sizeof(unsigned short));
+     ramp->size = size;
+ }
+ 
+@@ -207,9 +207,9 @@ void _glfwAllocGammaArrays(GLFWgammaramp* ramp, unsigned int size)
+ //
+ void _glfwFreeGammaArrays(GLFWgammaramp* ramp)
+ {
+-    free(ramp->red);
+-    free(ramp->green);
+-    free(ramp->blue);
++    _glfw_free(ramp->red);
++    _glfw_free(ramp->green);
++    _glfw_free(ramp->blue);
+ 
+     memset(ramp, 0, sizeof(GLFWgammaramp));
+ }
+@@ -474,7 +474,7 @@ GLFWAPI void glfwSetGamma(GLFWmonitor* handle, float gamma)
+     if (!original)
+         return;
+ 
+-    values = calloc(original->size, sizeof(unsigned short));
++    values = _glfw_calloc(original->size, sizeof(unsigned short));
+ 
+     for (i = 0;  i < original->size;  i++)
+     {
+@@ -496,7 +496,7 @@ GLFWAPI void glfwSetGamma(GLFWmonitor* handle, float gamma)
+     ramp.size = original->size;
+ 
+     glfwSetGammaRamp(handle, &ramp);
+-    free(values);
++    _glfw_free(values);
+ }
+ 
+ GLFWAPI const GLFWgammaramp* glfwGetGammaRamp(GLFWmonitor* handle)
+diff --git a/src/osmesa_context.c b/src/osmesa_context.c
+index c2fa49d..e4f9b33 100644
+--- a/src/osmesa_context.c
++++ b/src/osmesa_context.c
+@@ -46,10 +46,10 @@ static void makeContextCurrentOSMesa(_GLFWwindow* window)
+             (width != window->context.osmesa.width) ||
+             (height != window->context.osmesa.height))
+         {
+-            free(window->context.osmesa.buffer);
++            _glfw_free(window->context.osmesa.buffer);
+ 
+             // Allocate the new buffer (width * height * 8-bit RGBA)
+-            window->context.osmesa.buffer = calloc(4, (size_t) width * height);
++            window->context.osmesa.buffer = _glfw_calloc(4, (size_t) width * height);
+             window->context.osmesa.width  = width;
+             window->context.osmesa.height = height;
+         }
+@@ -83,7 +83,7 @@ static void destroyContextOSMesa(_GLFWwindow* window)
+ 
+     if (window->context.osmesa.buffer)
+     {
+-        free(window->context.osmesa.buffer);
++        _glfw_free(window->context.osmesa.buffer);
+         window->context.osmesa.width = 0;
+         window->context.osmesa.height = 0;
+     }
+diff --git a/src/switch_init.c b/src/switch_init.c
+index 4145a4a..7b4501d 100644
+--- a/src/switch_init.c
++++ b/src/switch_init.c
+@@ -84,6 +84,7 @@ void _glfwPlatformTerminateContextApi(void)
+ 
+ int _glfwPlatformInit(void)
+ {
++    ueventCreate(&_glfw.nx.wake_event, true);
+     appletLockExit();
+     appletSetFocusHandlingMode(AppletFocusHandlingMode_NoSuspend);
+     appletHook(&s_glfwAppletHookCookie, _glfwSwitchAppletHook, NULL);
+@@ -98,6 +99,7 @@ int _glfwPlatformInit(void)
+ 
+ void _glfwPlatformTerminate(void)
+ {
++    _glfwTerminateSwitchJoysticks();
+     _glfwPlatformTerminateContextApi();
+     appletUnhook(&s_glfwAppletHookCookie);
+     appletUnlockExit();
+@@ -107,4 +109,3 @@ const char* _glfwPlatformGetVersionString(void)
+ {
+     return _GLFW_VERSION_NUMBER " Switch EGL";
+ }
+-
+diff --git a/src/switch_joystick.c b/src/switch_joystick.c
+index e005423..0eab484 100644
+--- a/src/switch_joystick.c
++++ b/src/switch_joystick.c
+@@ -24,160 +24,284 @@
+ //
+ //========================================================================
+ 
++// MineSwitch: real per-Npad discovery and standard GLFW mapping support.
+ #include "internal.h"
+ 
+-// Built-in soft-reset combo that triggers a GLFW window close event
+-#define SOFT_RESET_COMBO (HidNpadButton_Plus|HidNpadButton_Minus|HidNpadButton_L|HidNpadButton_R)
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#define SWITCH_SLOT_COUNT 9
++#define SWITCH_BUTTON_COUNT 16
++#define SOFT_RESET_COMBO (HidNpadButton_Plus | HidNpadButton_Minus | HidNpadButton_L | HidNpadButton_R)
++
++// These identify the Horizon Npad *layout*, not a USB VID/PID or a serial number.
++// Keeping them backend-specific prevents desktop mappings from corrupting input.
++#define GUID_PRO      "6e780000010000000000000100000000"
++#define GUID_HANDHELD "6e780000010000000000000200000000"
++#define GUID_DUAL     "6e780000010000000000000400000000"
++#define GUID_LEFT     "6e780000010000000000000800000000"
++#define GUID_RIGHT    "6e780000010000000000001000000000"
++#define FULL_MAPPING \
++    "a:b1,b:b0,x:b3,y:b2,back:b11,start:b10,leftshoulder:b6,rightshoulder:b7," \
++    "leftstick:b4,rightstick:b5,dpup:h0.1,dpright:h0.2,dpdown:h0.4,dpleft:h0.8," \
++    "leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:b8,righttrigger:b9,platform:Switch,"
++
++typedef struct SwitchPadSlot
++{
++    PadState pad;
++    _GLFWjoystick* joystick;
++} SwitchPadSlot;
+ 
+-// Internal constants for gamepad mapping source types
+-#define _GLFW_JOYSTICK_AXIS     1
+-#define _GLFW_JOYSTICK_BUTTON   2
+-#define _GLFW_JOYSTICK_HATBIT   3
++static SwitchPadSlot s_slots[SWITCH_SLOT_COUNT];
++static GLFWbool s_legacyKeys;
++static u64 s_legacyButtons;
++static GLFWbool s_touchDown;
+ 
+-#define TOUCH_WIDTH             1280
+-#define TOUCH_HEIGHT            720
++static const char* const s_mappings[] =
++{
++    GUID_PRO      ",Nintendo Switch Pro Controller," FULL_MAPPING,
++    GUID_HANDHELD ",Nintendo Switch Handheld," FULL_MAPPING,
++    GUID_DUAL     ",Nintendo Switch Joy-Con (L/R)," FULL_MAPPING,
++    // Single Joy-Cons are mapped for horizontal use. Raw joystick axes remain
++    // in their physical upright orientation. No second stick is invented.
++    GUID_LEFT ",Nintendo Switch Joy-Con (L),a:h0.8,b:h0.4,x:h0.1,y:h0.2,"
++        "start:b11,leftshoulder:b12,rightshoulder:b13,leftstick:b4,"
++        "leftx:a1,lefty:a0~,lefttrigger:b6,righttrigger:b8,platform:Switch,",
++    GUID_RIGHT ",Nintendo Switch Joy-Con (R),a:b0,b:b2,x:b1,y:b3,"
++        "start:b10,leftshoulder:b14,rightshoulder:b15,leftstick:b5,"
++        "leftx:a1~,lefty:a0,lefttrigger:b7,righttrigger:b9,platform:Switch,"
++};
+ 
+-enum
++static u32 controllerStyle(const PadState* pad)
+ {
+-    _SWITCH_AXIS_LEFT_X,
+-    _SWITCH_AXIS_LEFT_Y,
+-    _SWITCH_AXIS_RIGHT_X,
+-    _SWITCH_AXIS_RIGHT_Y,
++    const u32 styles = padGetStyleSet(pad);
++    if (!padIsConnected(pad))
++        return 0;
++    if (styles & HidNpadStyleTag_NpadHandheld)
++        return HidNpadStyleTag_NpadHandheld;
++    if (styles & HidNpadStyleTag_NpadFullKey)
++        return HidNpadStyleTag_NpadFullKey;
++    if (styles & HidNpadStyleTag_NpadJoyDual)
++        return HidNpadStyleTag_NpadJoyDual;
++    if (styles & HidNpadStyleTag_NpadJoyLeft)
++        return HidNpadStyleTag_NpadJoyLeft;
++    if (styles & HidNpadStyleTag_NpadJoyRight)
++        return HidNpadStyleTag_NpadJoyRight;
++    return 0;
++}
+ 
+-    _SWITCH_AXIS_COUNT
+-};
++static const char* controllerName(u32 style)
++{
++    switch (style)
++    {
++        case HidNpadStyleTag_NpadFullKey:  return "Nintendo Switch Pro Controller";
++        case HidNpadStyleTag_NpadHandheld: return "Nintendo Switch Handheld";
++        case HidNpadStyleTag_NpadJoyDual:  return "Nintendo Switch Joy-Con (L/R)";
++        case HidNpadStyleTag_NpadJoyLeft:  return "Nintendo Switch Joy-Con (L)";
++        case HidNpadStyleTag_NpadJoyRight: return "Nintendo Switch Joy-Con (R)";
++    }
++    return NULL;
++}
+ 
+-enum
++static const char* controllerGUID(u32 style)
+ {
+-    _SWITCH_BUTTON_A,
+-    _SWITCH_BUTTON_B,
+-    _SWITCH_BUTTON_X,
+-    _SWITCH_BUTTON_Y,
+-    _SWITCH_BUTTON_LSTICK,
+-    _SWITCH_BUTTON_RSTICK,
+-    _SWITCH_BUTTON_L,
+-    _SWITCH_BUTTON_R,
+-    _SWITCH_BUTTON_ZL,
+-    _SWITCH_BUTTON_ZR,
+-    _SWITCH_BUTTON_PLUS,
+-    _SWITCH_BUTTON_MINUS,
+-
+-    _SWITCH_BUTTON_COUNT
+-};
++    switch (style)
++    {
++        case HidNpadStyleTag_NpadFullKey:  return GUID_PRO;
++        case HidNpadStyleTag_NpadHandheld: return GUID_HANDHELD;
++        case HidNpadStyleTag_NpadJoyDual:  return GUID_DUAL;
++        case HidNpadStyleTag_NpadJoyLeft:  return GUID_LEFT;
++        case HidNpadStyleTag_NpadJoyRight: return GUID_RIGHT;
++    }
++    return NULL;
++}
+ 
+-enum
++static void disconnectJoystick(SwitchPadSlot* slot)
+ {
+-    _SWITCH_HAT_DPAD,
+-    _SWITCH_HAT_LEFT_STICK,
+-    _SWITCH_HAT_RIGHT_STICK,
++    _GLFWjoystick* js = slot->joystick;
++    slot->joystick = NULL;
++    // GLFW requires absent state, and invalidated user pointer, in the callback.
++    _glfwFreeJoystick(js);
++    _glfwInputJoystick(js, GLFW_DISCONNECTED);
++}
+ 
+-    _SWITCH_HAT_COUNT
+-};
++static float stickAxis(s32 value)
++{
++    // libnx's calibrated range is [-32767, 32767]; clamp defensively.
++    const float normalized = value / 32767.f;
++    return _glfw_fminf(_glfw_fmaxf(normalized, -1.f), 1.f);
++}
+ 
+-static _GLFWmapping s_switchMapping =
++static void updateJoystickState(_GLFWjoystick* js, const PadState* pad, int mode)
+ {
+-    .name = "Nintendo Switch Controller",
+-    .guid = "",
+-    .buttons =
+-    {
+-        [GLFW_GAMEPAD_BUTTON_A]            = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_A },
+-        [GLFW_GAMEPAD_BUTTON_B]            = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_B },
+-        [GLFW_GAMEPAD_BUTTON_X]            = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_X },
+-        [GLFW_GAMEPAD_BUTTON_Y]            = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_Y },
+-        [GLFW_GAMEPAD_BUTTON_BACK]         = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_MINUS },
+-        [GLFW_GAMEPAD_BUTTON_START]        = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_PLUS },
+-        //[GLFW_GAMEPAD_BUTTON_GUIDE]        = { .type = _GLFW_JOYSTICK_BUTTON, .index = 0 },
+-        [GLFW_GAMEPAD_BUTTON_LEFT_BUMPER]  = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_L },
+-        [GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER] = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_R },
+-        [GLFW_GAMEPAD_BUTTON_LEFT_THUMB]   = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_LSTICK },
+-        [GLFW_GAMEPAD_BUTTON_RIGHT_THUMB]  = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_RSTICK },
+-        [GLFW_GAMEPAD_BUTTON_DPAD_UP]      = { .type = _GLFW_JOYSTICK_HATBIT, .index = (_SWITCH_HAT_DPAD<<4) | 0x1 },
+-        [GLFW_GAMEPAD_BUTTON_DPAD_RIGHT]   = { .type = _GLFW_JOYSTICK_HATBIT, .index = (_SWITCH_HAT_DPAD<<4) | 0x2 },
+-        [GLFW_GAMEPAD_BUTTON_DPAD_DOWN]    = { .type = _GLFW_JOYSTICK_HATBIT, .index = (_SWITCH_HAT_DPAD<<4) | 0x4 },
+-        [GLFW_GAMEPAD_BUTTON_DPAD_LEFT]    = { .type = _GLFW_JOYSTICK_HATBIT, .index = (_SWITCH_HAT_DPAD<<4) | 0x8 },
+-    },
+-    .axes =
++    if (mode & _GLFW_POLL_AXES)
+     {
+-        [GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]   = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_ZL },
+-        [GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]  = { .type = _GLFW_JOYSTICK_BUTTON, .index = _SWITCH_BUTTON_ZR },
+-        [GLFW_GAMEPAD_AXIS_LEFT_X]         = { .type = _GLFW_JOYSTICK_AXIS,   .index = _SWITCH_AXIS_LEFT_X,  .axisScale = 1, .axisOffset = 0 },
+-        [GLFW_GAMEPAD_AXIS_LEFT_Y]         = { .type = _GLFW_JOYSTICK_AXIS,   .index = _SWITCH_AXIS_LEFT_Y,  .axisScale = 1, .axisOffset = 0 },
+-        [GLFW_GAMEPAD_AXIS_RIGHT_X]        = { .type = _GLFW_JOYSTICK_AXIS,   .index = _SWITCH_AXIS_RIGHT_X, .axisScale = 1, .axisOffset = 0 },
+-        [GLFW_GAMEPAD_AXIS_RIGHT_Y]        = { .type = _GLFW_JOYSTICK_AXIS,   .index = _SWITCH_AXIS_RIGHT_Y, .axisScale = 1, .axisOffset = 0 },
+-    },
+-};
++        const int stick = js->nx.style == HidNpadStyleTag_NpadJoyRight ? 1 : 0;
++        const HidAnalogStickState first = padGetStickPos(pad, stick);
++        _glfwInputJoystickAxis(js, 0, stickAxis(first.x));
++        _glfwInputJoystickAxis(js, 1, -stickAxis(first.y));
++        if (js->axisCount == 4)
++        {
++            const HidAnalogStickState right = padGetStickPos(pad, 1);
++            _glfwInputJoystickAxis(js, 2, stickAxis(right.x));
++            _glfwInputJoystickAxis(js, 3, -stickAxis(right.y));
++        }
++    }
+ 
+-PadState pad;
++    if (mode & _GLFW_POLL_BUTTONS)
++    {
++        const u64 buttons = padGetButtons(pad);
++        unsigned int i;
++        unsigned char hat = GLFW_HAT_CENTERED;
++        // Raw buttons 0..11 match libnx A..Minus; 12..15 are the real rails.
++        for (i = 0; i < 12; i++)
++            _glfwInputJoystickButton(js, i, buttons & BITL(i) ? GLFW_PRESS : GLFW_RELEASE);
++        for (i = 0; i < 4; i++)
++            _glfwInputJoystickButton(js, 12 + i, buttons & BITL(24 + i) ? GLFW_PRESS : GLFW_RELEASE);
++        if (buttons & HidNpadButton_Up)    hat |= GLFW_HAT_UP;
++        if (buttons & HidNpadButton_Right) hat |= GLFW_HAT_RIGHT;
++        if (buttons & HidNpadButton_Down)  hat |= GLFW_HAT_DOWN;
++        if (buttons & HidNpadButton_Left)  hat |= GLFW_HAT_LEFT;
++        _glfwInputJoystickHat(js, 0, hat);
++    }
++}
+ 
+ void _glfwInitSwitchJoysticks(void)
+ {
+-    _GLFWjoystick* js = _glfwAllocJoystick(s_switchMapping.name, s_switchMapping.guid,
+-        _SWITCH_AXIS_COUNT, _SWITCH_BUTTON_COUNT, _SWITCH_HAT_COUNT);
+-
+-    padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+-    padInitializeDefault(&pad);
++    unsigned int i;
++    const char* legacy = getenv("MINESWITCH_GLFW_LEGACY_KEYS");
++    memset(s_slots, 0, sizeof(s_slots));
++    s_legacyKeys = legacy && strcmp(legacy, "1") == 0;
++    s_legacyButtons = 0;
++    s_touchDown = GLFW_FALSE;
++    padConfigureInput(8, HidNpadStyleSet_NpadStandard);
++    // Handheld and player 1 are independent sources, never an aggregate pad.
++    padInitialize(&s_slots[0].pad, HidNpadIdType_Handheld);
++    for (i = 1; i < SWITCH_SLOT_COUNT; i++)
++        padInitializeWithMask(&s_slots[i].pad, 1UL << (HidNpadIdType_No1 + i - 1));
+     hidInitializeTouchScreen();
+-    
+-    js->mapping = &s_switchMapping;
+-
+-    padUpdate(&pad);
+-    _glfwInputJoystick(js, GLFW_CONNECTED);
++    _glfwUpdateSwitchJoysticks();
+ }
+ 
+-void _glfwUpdateSwitchJoysticks(void)
++GLFWbool _glfwInitSwitchGamepadMappings(void)
+ {
+-    u64 down, held, up;
++    unsigned int i;
++    for (i = 0; i < sizeof(s_mappings) / sizeof(s_mappings[0]); i++)
++    {
++        if (!glfwUpdateGamepadMappings(s_mappings[i]))
++            return GLFW_FALSE;
++    }
++    return GLFW_TRUE;
++}
+ 
+-    // Read input state
+-    padUpdate(&pad);
+-    down = padGetButtonsDown(&pad);
+-    held = padGetButtons(&pad);
+-    up   = padGetButtonsUp(&pad);
++void _glfwTerminateSwitchJoysticks(void)
++{
++    unsigned int i;
++    for (i = 0; i < SWITCH_SLOT_COUNT; i++)
++    {
++        if (s_slots[i].joystick)
++            _glfwFreeJoystick(s_slots[i].joystick);
++    }
++    memset(s_slots, 0, sizeof(s_slots));
++    s_legacyButtons = 0;
++    s_touchDown = GLFW_FALSE;
++}
+ 
+-    // Check for soft-reset combo
+-    if ((held & SOFT_RESET_COMBO) == SOFT_RESET_COMBO)
++static void updateWindowInput(u64 buttons)
++{
++    _GLFWwindow* window = _glfw.nx.cur_window;
++    HidTouchScreenState touch = {0};
++    if (!window)
+     {
+-        _glfwInputWindowCloseRequest(_glfw.nx.cur_window);
++        s_legacyButtons = 0;
++        s_touchDown = GLFW_FALSE;
+         return;
+     }
+ 
+-#define MAP_KEY(_libnx_key, _glfw_key, _scancode) \
+-    do { \
+-        if (down & (_libnx_key)) _glfwInputKey(_glfw.nx.cur_window, (_glfw_key), (_scancode), GLFW_PRESS, 0); \
+-        else if (up & (_libnx_key)) _glfwInputKey(_glfw.nx.cur_window, (_glfw_key), (_scancode), GLFW_RELEASE, 0); \
+-    } while (0)
+-
+-    // Map common keyboard keys to the controller
+-    // TODO: Only do this mapping if a keyboard isn't connected
+-    MAP_KEY(HidNpadButton_Up, GLFW_KEY_UP, HidKeyboardKey_UpArrow);
+-    MAP_KEY(HidNpadButton_Down, GLFW_KEY_DOWN, HidKeyboardKey_DownArrow);
+-    MAP_KEY(HidNpadButton_Left, GLFW_KEY_LEFT, HidKeyboardKey_LeftArrow);
+-    MAP_KEY(HidNpadButton_Right, GLFW_KEY_RIGHT, HidKeyboardKey_RightArrow);
+-    MAP_KEY(HidNpadButton_A, GLFW_KEY_X, HidKeyboardKey_X);
+-    MAP_KEY(HidNpadButton_B, GLFW_KEY_Z, HidKeyboardKey_Z);
+-    MAP_KEY(HidNpadButton_X, GLFW_KEY_S, HidKeyboardKey_S);
+-    MAP_KEY(HidNpadButton_Y, GLFW_KEY_A, HidKeyboardKey_A);
+-    MAP_KEY(HidNpadButton_Plus, GLFW_KEY_ENTER, HidKeyboardKey_Return);
+-    MAP_KEY(HidNpadButton_Minus, GLFW_KEY_ESCAPE, HidKeyboardKey_Escape);
+-
+-    // Report touch inputs as mouse clicks
+-    HidTouchScreenState state={0};
+-    if (hidGetTouchScreenStates(&state, 1)) {
+-        if (state.count > 0)
+-        {
+-
+-            double scaledXPos = (double)state.touches[0].x / TOUCH_WIDTH * _glfw.nx.scr_width;
+-            double scaledYPos = (double)state.touches[0].y / TOUCH_HEIGHT * _glfw.nx.scr_height;
++    if ((buttons & SOFT_RESET_COMBO) == SOFT_RESET_COMBO)
++        _glfwInputWindowCloseRequest(window);
+ 
+-            _glfwInputCursorPos(_glfw.nx.cur_window, scaledXPos, scaledYPos);
++    if (s_legacyKeys)
++    {
++        // Explicit compatibility opt-in. Default off: a controller mod must
++        // not receive both a gamepad action and a synthesized keyboard action.
++        const u64 down = buttons & ~s_legacyButtons;
++        const u64 up = s_legacyButtons & ~buttons;
++#define MAP_KEY(button, key, scancode) \
++        do { \
++            if (down & (button)) _glfwInputKey(window, key, scancode, GLFW_PRESS, 0); \
++            if (up & (button)) _glfwInputKey(window, key, scancode, GLFW_RELEASE, 0); \
++        } while (0)
++        MAP_KEY(HidNpadButton_Up, GLFW_KEY_UP, HidKeyboardKey_UpArrow);
++        MAP_KEY(HidNpadButton_Down, GLFW_KEY_DOWN, HidKeyboardKey_DownArrow);
++        MAP_KEY(HidNpadButton_Left, GLFW_KEY_LEFT, HidKeyboardKey_LeftArrow);
++        MAP_KEY(HidNpadButton_Right, GLFW_KEY_RIGHT, HidKeyboardKey_RightArrow);
++        MAP_KEY(HidNpadButton_A, GLFW_KEY_X, HidKeyboardKey_X);
++        MAP_KEY(HidNpadButton_B, GLFW_KEY_Z, HidKeyboardKey_Z);
++        MAP_KEY(HidNpadButton_X, GLFW_KEY_S, HidKeyboardKey_S);
++        MAP_KEY(HidNpadButton_Y, GLFW_KEY_A, HidKeyboardKey_A);
++        MAP_KEY(HidNpadButton_Plus, GLFW_KEY_ENTER, HidKeyboardKey_Return);
++        MAP_KEY(HidNpadButton_Minus, GLFW_KEY_ESCAPE, HidKeyboardKey_Escape);
++#undef MAP_KEY
++    }
++    s_legacyButtons = buttons;
+ 
+-            if (_glfw.nx.cur_window->mouseButtons[GLFW_MOUSE_BUTTON_LEFT] == GLFW_RELEASE)
+-                _glfwInputMouseClick(_glfw.nx.cur_window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
++    // Preserve touch-to-mouse input independently of controller presence.
++    if (hidGetTouchScreenStates(&touch, 1) && touch.count > 0)
++    {
++        const double x = touch.touches[0].x / 1280.0 * window->nx.width;
++        const double y = touch.touches[0].y / 720.0 * window->nx.height;
++        _glfwInputCursorPos(window, x, y);
++        if (!s_touchDown)
++            _glfwInputMouseClick(window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
++        s_touchDown = GLFW_TRUE;
++    }
++    else if (s_touchDown)
++    {
++        _glfwInputMouseClick(window, GLFW_MOUSE_BUTTON_LEFT, GLFW_RELEASE, 0);
++        s_touchDown = GLFW_FALSE;
++    }
++}
+ 
++void _glfwUpdateSwitchJoysticks(void)
++{
++    unsigned int i;
++    u64 primaryButtons = 0;
++    GLFWbool havePrimary = GLFW_FALSE;
++    for (i = 0; i < SWITCH_SLOT_COUNT; i++)
++    {
++        SwitchPadSlot* slot = s_slots + i;
++        u32 style;
++        padUpdate(&slot->pad);
++        style = controllerStyle(&slot->pad);
++        if (slot->joystick && style != slot->joystick->nx.style)
++            disconnectJoystick(slot);
++        if (!style)
++            continue;
++        if (!slot->joystick)
++        {
++            const int axes = style == HidNpadStyleTag_NpadJoyLeft ||
++                             style == HidNpadStyleTag_NpadJoyRight ? 2 : 4;
++            _GLFWjoystick* js = _glfwAllocJoystick(controllerName(style),
++                controllerGUID(style), axes, SWITCH_BUTTON_COUNT, 1);
++            if (!js)
++                continue;
++            js->nx.slot = i;
++            js->nx.style = style;
++            slot->joystick = js;
++            updateJoystickState(js, &slot->pad, _GLFW_POLL_ALL);
++            _glfwInputJoystick(js, GLFW_CONNECTED);
++        }
++        else
++            updateJoystickState(slot->joystick, &slot->pad, _GLFW_POLL_ALL);
++        if (!havePrimary)
++        {
++            primaryButtons = padGetButtons(&slot->pad);
++            havePrimary = GLFW_TRUE;
+         }
+-        else if (_glfw.nx.cur_window->mouseButtons[GLFW_MOUSE_BUTTON_LEFT] == GLFW_PRESS)
+-            _glfwInputMouseClick(_glfw.nx.cur_window, GLFW_MOUSE_BUTTON_LEFT, GLFW_RELEASE, 0);
+     }
++    updateWindowInput(primaryButtons);
+ }
+ 
+ //////////////////////////////////////////////////////////////////////////
+@@ -186,45 +310,19 @@ void _glfwUpdateSwitchJoysticks(void)
+ 
+ int _glfwPlatformPollJoystick(_GLFWjoystick* js, int mode)
+ {
+-    // Detect presence
+-    if (!padIsConnected(&pad))
+-        return GLFW_FALSE;
+-
+-    if (mode & _GLFW_POLL_AXES)
+-    {
+-        HidAnalogStickState left, right;
+-        left = padGetStickPos(&pad, 0);
+-        right = padGetStickPos(&pad, 1);
+-        _glfwInputJoystickAxis(js, _SWITCH_AXIS_LEFT_X,   left.x  / 32768.0f);
+-        _glfwInputJoystickAxis(js, _SWITCH_AXIS_LEFT_Y,  -left.y  / 32768.0f);
+-        _glfwInputJoystickAxis(js, _SWITCH_AXIS_RIGHT_X,  right.x / 32768.0f);
+-        _glfwInputJoystickAxis(js, _SWITCH_AXIS_RIGHT_Y, -right.y / 32768.0f);
+-    }
+-
+-    if (mode & _GLFW_POLL_BUTTONS)
++    SwitchPadSlot* slot = s_slots + js->nx.slot;
++    padUpdate(&slot->pad);
++    if (controllerStyle(&slot->pad) != js->nx.style)
+     {
+-        int i;
+-        u64 keys = padGetButtons(&pad);
+-        keys |= ((keys >> 24) & 0x3) << _SWITCH_BUTTON_L; // Map KEY_SL/SR_LEFT  into HidNpadButton_L/R
+-        keys |= ((keys >> 26) & 0x3) << _SWITCH_BUTTON_L; // Map KEY_SL/SR_RIGHT into HidNpadButton_L/R
+-        for (i = 0; i < _SWITCH_BUTTON_COUNT; i ++)
+-            _glfwInputJoystickButton(js, i, (keys & BIT(i)) ? GLFW_PRESS : GLFW_RELEASE);
+-        for (i = 0; i < _SWITCH_HAT_COUNT; i ++)
+-        {
+-            // Extract hat values. A small ROR operation is necessary
+-            // in order to convert Switch DRUL into glfw LDRU
+-            char hatbits = (keys >> (12 + 4*i)) & 0xF;
+-            hatbits = (hatbits >> 1) | ((hatbits & 1) << 3);
+-            _glfwInputJoystickHat(js, i, hatbits);
+-        }
++        disconnectJoystick(slot);
++        return GLFW_FALSE;
+     }
+-
++    updateJoystickState(js, &slot->pad, mode);
+     return GLFW_TRUE;
+ }
+ 
+-/* Not used on Switch
+ void _glfwPlatformUpdateGamepadGUID(char* guid)
+ {
++    // Horizon GUIDs already identify our stable Npad layouts.
++    (void) guid;
+ }
+-*/
+-
+diff --git a/src/switch_joystick.h b/src/switch_joystick.h
+index 9314b37..7970ece 100644
+--- a/src/switch_joystick.h
++++ b/src/switch_joystick.h
+@@ -33,8 +33,12 @@
+ //
+ typedef struct _GLFWjoystickNX
+ {
++    unsigned int slot;
++    u32 style;
+ } _GLFWjoystickNX;
+ 
+ void _glfwInitSwitchJoysticks(void);
++GLFWbool _glfwInitSwitchGamepadMappings(void);
++void _glfwTerminateSwitchJoysticks(void);
+ void _glfwUpdateSwitchJoysticks(void);
+ 
+diff --git a/src/switch_monitor.c b/src/switch_monitor.c
+index 4a7df35..11d0c46 100644
+--- a/src/switch_monitor.c
++++ b/src/switch_monitor.c
+@@ -64,7 +64,7 @@ void _glfwPlatformGetMonitorWorkarea(_GLFWmonitor* monitor,
+ 
+ GLFWvidmode* _glfwPlatformGetVideoModes(_GLFWmonitor* monitor, int* found)
+ {
+-    GLFWvidmode* modes = calloc(1, sizeof(GLFWvidmode));
++    GLFWvidmode* modes = _glfw_calloc(1, sizeof(GLFWvidmode));
+     _glfwPlatformGetVideoMode(monitor, modes);
+     *found = 1;
+     return modes;
+diff --git a/src/switch_platform.h b/src/switch_platform.h
+index 1158b6c..0ab1e3e 100644
+--- a/src/switch_platform.h
++++ b/src/switch_platform.h
+@@ -79,6 +79,7 @@ typedef struct _GLFWlibraryNX
+     int event_mask;
+     int is_focused;
+     int scr_width, scr_height;
++    UEvent wake_event;
+ } _GLFWlibraryNX;
+ 
+ // Switch-specific context management functions
+@@ -96,4 +97,3 @@ GLFWAPI void _glfwSwapBuffersImpl(GLFWwindow* handle);
+ GLFWAPI void _glfwSwapIntervalImpl(int interval);
+ GLFWAPI int _glfwExtensionSupportedImpl(const char* extension);
+ GLFWAPI GLFWglproc _glfwGetProcAddressImpl(const char* procname);
+-
+diff --git a/src/switch_window.c b/src/switch_window.c
+index 594a139..c58387a 100644
+--- a/src/switch_window.c
++++ b/src/switch_window.c
+@@ -27,6 +27,10 @@
+ 
+ #include "internal.h"
+ 
++// MineSwitch may show a native startup screen until the game actually creates
++// its window. The owner releases its renderer on the SDK main thread first.
++extern void mineswitch_glfw_graphics_handoff(void) __attribute__((weak));
++
+ 
+ #define FB_WIDTH  1920
+ #define FB_HEIGHT 1080
+@@ -89,6 +93,9 @@ int _glfwPlatformCreateWindow(_GLFWwindow* window,
+         return GLFW_FALSE;
+     }
+ 
++    if (mineswitch_glfw_graphics_handoff)
++        mineswitch_glfw_graphics_handoff();
++
+     if (!createNativeWindow(window, wndconfig))
+         return GLFW_FALSE;
+ 
+@@ -287,7 +294,10 @@ void _glfwPlatformPollEvents(void)
+     Result res;
+ 
+     if (!_glfw.nx.cur_window)
++    {
++        _glfwUpdateSwitchJoysticks();
+         return;
++    }
+ 
+     int events;
+     do
+@@ -323,16 +333,29 @@ void _glfwPlatformPollEvents(void)
+ 
+ void _glfwPlatformWaitEvents(void)
+ {
+-    _glfwPlatformPollEvents();
++    _glfwPlatformWaitEventsTimeout(0.016);
+ }
+ 
+ void _glfwPlatformWaitEventsTimeout(double timeout)
+ {
++    // HID state is polled rather than delivered as a native window event.
++    // Keep it responsive while letting Minecraft's frame limiter sleep.
++    // A posted event remains signalled until consumed, including one posted
++    // immediately before this wait. UEvent needs no privileged kernel event.
++    if (timeout > 0.0)
++    {
++        const double bounded = timeout < 0.016 ? timeout : 0.016;
++        u64 nanoseconds = (u64) (bounded * 1000000000.0);
++        if (nanoseconds == 0)
++            nanoseconds = 1;
++        waitSingle(waiterForUEvent(&_glfw.nx.wake_event), nanoseconds);
++    }
+     _glfwPlatformPollEvents();
+ }
+ 
+ void _glfwPlatformPostEmptyEvent(void)
+ {
++    ueventSignal(&_glfw.nx.wake_event);
+ }
+ 
+ void _glfwPlatformGetCursorPos(_GLFWwindow* window, double* xpos, double* ypos)
+@@ -408,4 +431,3 @@ VkResult _glfwPlatformCreateWindowSurface(VkInstance instance,
+     // (wishful thinking though - I have no idea when will Vulkan be supported)
+     return VK_ERROR_INITIALIZATION_FAILED;
+ }
+-
+diff --git a/src/vulkan.c b/src/vulkan.c
+index e186dd0..6763d82 100644
+--- a/src/vulkan.c
++++ b/src/vulkan.c
+@@ -43,6 +43,13 @@
+ 
+ GLFWbool _glfwInitVulkan(int mode)
+ {
++#if defined(_GLFW_SWITCH) && !defined(_GLFW_VULKAN_STATIC)
++    // This Horizon build has EGL/OpenGL but no Vulkan loader. Report the
++    // normal unavailable capability instead of adding nonexistent vk symbols.
++    if (mode == _GLFW_REQUIRE_LOADER)
++        _glfwInputError(GLFW_API_UNAVAILABLE, "Switch: Vulkan loader unavailable");
++    return GLFW_FALSE;
++#else
+     VkResult err;
+     VkExtensionProperties* ep;
+     uint32_t i, count;
+@@ -108,7 +115,7 @@ GLFWbool _glfwInitVulkan(int mode)
+         return GLFW_FALSE;
+     }
+ 
+-    ep = calloc(count, sizeof(VkExtensionProperties));
++    ep = _glfw_calloc(count, sizeof(VkExtensionProperties));
+ 
+     err = vkEnumerateInstanceExtensionProperties(NULL, &count, ep);
+     if (err)
+@@ -117,7 +124,7 @@ GLFWbool _glfwInitVulkan(int mode)
+                         "Vulkan: Failed to query instance extensions: %s",
+                         _glfwGetVulkanResultString(err));
+ 
+-        free(ep);
++        _glfw_free(ep);
+         _glfwTerminateVulkan();
+         return GLFW_FALSE;
+     }
+@@ -148,18 +155,19 @@ GLFWbool _glfwInitVulkan(int mode)
+ #endif
+     }
+ 
+-    free(ep);
++    _glfw_free(ep);
+ 
+     _glfw.vk.available = GLFW_TRUE;
+ 
+     _glfwPlatformGetRequiredInstanceExtensions(_glfw.vk.extensions);
+ 
+     return GLFW_TRUE;
++#endif
+ }
+ 
+ void _glfwTerminateVulkan(void)
+ {
+-#if !defined(_GLFW_VULKAN_STATIC)
++#if !defined(_GLFW_VULKAN_STATIC) && !defined(_GLFW_SWITCH)
+     if (_glfw.vk.handle)
+         _glfw_dlclose(_glfw.vk.handle);
+ #endif
+@@ -267,7 +275,7 @@ GLFWAPI GLFWvkproc glfwGetInstanceProcAddress(VkInstance instance,
+         if (strcmp(procname, "vkGetInstanceProcAddr") == 0)
+             return (GLFWvkproc) vkGetInstanceProcAddr;
+     }
+-#else
++#elif !defined(_GLFW_SWITCH)
+     if (!proc)
+         proc = (GLFWvkproc) _glfw_dlsym(_glfw.vk.handle, procname);
+ #endif
+@@ -332,4 +340,3 @@ GLFWAPI VkResult glfwCreateWindowSurface(VkInstance instance,
+ 
+     return _glfwPlatformCreateWindowSurface(instance, window, allocator, surface);
+ }
+-
+diff --git a/src/wgl_context.c b/src/wgl_context.c
+index b7d1c4d..ddcb3b8 100644
+--- a/src/wgl_context.c
++++ b/src/wgl_context.c
+@@ -130,7 +130,7 @@ static int choosePixelFormat(_GLFWwindow* window,
+                                           NULL);
+     }
+ 
+-    usableConfigs = calloc(nativeCount, sizeof(_GLFWfbconfig));
++    usableConfigs = _glfw_calloc(nativeCount, sizeof(_GLFWfbconfig));
+ 
+     for (i = 0;  i < nativeCount;  i++)
+     {
+@@ -149,7 +149,7 @@ static int choosePixelFormat(_GLFWwindow* window,
+                 _glfwInputErrorWin32(GLFW_PLATFORM_ERROR,
+                                     "WGL: Failed to retrieve pixel format attributes");
+ 
+-                free(usableConfigs);
++                _glfw_free(usableConfigs);
+                 return 0;
+             }
+ 
+@@ -220,7 +220,7 @@ static int choosePixelFormat(_GLFWwindow* window,
+                 _glfwInputErrorWin32(GLFW_PLATFORM_ERROR,
+                                     "WGL: Failed to describe pixel format");
+ 
+-                free(usableConfigs);
++                _glfw_free(usableConfigs);
+                 return 0;
+             }
+ 
+@@ -269,7 +269,7 @@ static int choosePixelFormat(_GLFWwindow* window,
+         _glfwInputError(GLFW_API_UNAVAILABLE,
+                         "WGL: The driver does not appear to support OpenGL");
+ 
+-        free(usableConfigs);
++        _glfw_free(usableConfigs);
+         return 0;
+     }
+ 
+@@ -279,12 +279,12 @@ static int choosePixelFormat(_GLFWwindow* window,
+         _glfwInputError(GLFW_FORMAT_UNAVAILABLE,
+                         "WGL: Failed to find a suitable pixel format");
+ 
+-        free(usableConfigs);
++        _glfw_free(usableConfigs);
+         return 0;
+     }
+ 
+     pixelFormat = (int) closest->handle;
+-    free(usableConfigs);
++    _glfw_free(usableConfigs);
+ 
+     return pixelFormat;
+ }
+diff --git a/src/win32_init.c b/src/win32_init.c
+index 22c1ba7..090defa 100644
+--- a/src/win32_init.c
++++ b/src/win32_init.c
+@@ -405,13 +405,13 @@ WCHAR* _glfwCreateWideStringFromUTF8Win32(const char* source)
+         return NULL;
+     }
+ 
+-    target = calloc(count, sizeof(WCHAR));
++    target = _glfw_calloc(count, sizeof(WCHAR));
+ 
+     if (!MultiByteToWideChar(CP_UTF8, 0, source, -1, target, count))
+     {
+         _glfwInputErrorWin32(GLFW_PLATFORM_ERROR,
+                              "Win32: Failed to convert string from UTF-8");
+-        free(target);
++        _glfw_free(target);
+         return NULL;
+     }
+ 
+@@ -433,13 +433,13 @@ char* _glfwCreateUTF8FromWideStringWin32(const WCHAR* source)
+         return NULL;
+     }
+ 
+-    target = calloc(size, 1);
++    target = _glfw_calloc(size, 1);
+ 
+     if (!WideCharToMultiByte(CP_UTF8, 0, source, -1, target, size, NULL, NULL))
+     {
+         _glfwInputErrorWin32(GLFW_PLATFORM_ERROR,
+                              "Win32: Failed to convert string to UTF-8");
+-        free(target);
++        _glfw_free(target);
+         return NULL;
+     }
+ 
+@@ -607,8 +607,8 @@ void _glfwPlatformTerminate(void)
+                           UIntToPtr(_glfw.win32.foregroundLockTimeout),
+                           SPIF_SENDCHANGE);
+ 
+-    free(_glfw.win32.clipboardString);
+-    free(_glfw.win32.rawInput);
++    _glfw_free(_glfw.win32.clipboardString);
++    _glfw_free(_glfw.win32.rawInput);
+ 
+     _glfwTerminateWGL();
+     _glfwTerminateEGL();
+diff --git a/src/win32_joystick.c b/src/win32_joystick.c
+index 62ad7a5..05947a7 100644
+--- a/src/win32_joystick.c
++++ b/src/win32_joystick.c
+@@ -199,11 +199,11 @@ static GLFWbool supportsXInput(const GUID* guid)
+     if (GetRawInputDeviceList(NULL, &count, sizeof(RAWINPUTDEVICELIST)) != 0)
+         return GLFW_FALSE;
+ 
+-    ridl = calloc(count, sizeof(RAWINPUTDEVICELIST));
++    ridl = _glfw_calloc(count, sizeof(RAWINPUTDEVICELIST));
+ 
+     if (GetRawInputDeviceList(ridl, &count, sizeof(RAWINPUTDEVICELIST)) == (UINT) -1)
+     {
+-        free(ridl);
++        _glfw_free(ridl);
+         return GLFW_FALSE;
+     }
+ 
+@@ -248,7 +248,7 @@ static GLFWbool supportsXInput(const GUID* guid)
+         }
+     }
+ 
+-    free(ridl);
++    _glfw_free(ridl);
+     return result;
+ }
+ 
+@@ -262,7 +262,7 @@ static void closeJoystick(_GLFWjoystick* js)
+         IDirectInputDevice8_Release(js->win32.device);
+     }
+ 
+-    free(js->win32.objects);
++    _glfw_free(js->win32.objects);
+ 
+     _glfwFreeJoystick(js);
+     _glfwInputJoystick(js, GLFW_DISCONNECTED);
+@@ -416,7 +416,7 @@ static BOOL CALLBACK deviceCallback(const DIDEVICEINSTANCE* di, void* user)
+ 
+     memset(&data, 0, sizeof(data));
+     data.device = device;
+-    data.objects = calloc(dc.dwAxes + (size_t) dc.dwButtons + dc.dwPOVs,
++    data.objects = _glfw_calloc(dc.dwAxes + (size_t) dc.dwButtons + dc.dwPOVs,
+                           sizeof(_GLFWjoyobjectWin32));
+ 
+     if (FAILED(IDirectInputDevice8_EnumObjects(device,
+@@ -428,7 +428,7 @@ static BOOL CALLBACK deviceCallback(const DIDEVICEINSTANCE* di, void* user)
+                         "Win32: Failed to enumerate device objects");
+ 
+         IDirectInputDevice8_Release(device);
+-        free(data.objects);
++        _glfw_free(data.objects);
+         return DIENUM_CONTINUE;
+     }
+ 
+@@ -445,7 +445,7 @@ static BOOL CALLBACK deviceCallback(const DIDEVICEINSTANCE* di, void* user)
+                         "Win32: Failed to convert joystick name to UTF-8");
+ 
+         IDirectInputDevice8_Release(device);
+-        free(data.objects);
++        _glfw_free(data.objects);
+         return DIENUM_STOP;
+     }
+ 
+@@ -473,7 +473,7 @@ static BOOL CALLBACK deviceCallback(const DIDEVICEINSTANCE* di, void* user)
+     if (!js)
+     {
+         IDirectInputDevice8_Release(device);
+-        free(data.objects);
++        _glfw_free(data.objects);
+         return DIENUM_STOP;
+     }
+ 
+diff --git a/src/win32_monitor.c b/src/win32_monitor.c
+index c8bae35..162b7b1 100644
+--- a/src/win32_monitor.c
++++ b/src/win32_monitor.c
+@@ -96,7 +96,7 @@ static _GLFWmonitor* createMonitor(DISPLAY_DEVICEW* adapter,
+     DeleteDC(dc);
+ 
+     monitor = _glfwAllocMonitor(name, widthMM, heightMM);
+-    free(name);
++    _glfw_free(name);
+ 
+     if (adapter->StateFlags & DISPLAY_DEVICE_MODESPRUNED)
+         monitor->win32.modesPruned = GLFW_TRUE;
+@@ -145,7 +145,7 @@ void _glfwPollMonitorsWin32(void)
+     disconnectedCount = _glfw.monitorCount;
+     if (disconnectedCount)
+     {
+-        disconnected = calloc(_glfw.monitorCount, sizeof(_GLFWmonitor*));
++        disconnected = _glfw_calloc(_glfw.monitorCount, sizeof(_GLFWmonitor*));
+         memcpy(disconnected,
+                _glfw.monitors,
+                _glfw.monitorCount * sizeof(_GLFWmonitor*));
+@@ -197,7 +197,7 @@ void _glfwPollMonitorsWin32(void)
+             monitor = createMonitor(&adapter, &display);
+             if (!monitor)
+             {
+-                free(disconnected);
++                _glfw_free(disconnected);
+                 return;
+             }
+ 
+@@ -227,7 +227,7 @@ void _glfwPollMonitorsWin32(void)
+             monitor = createMonitor(&adapter, NULL);
+             if (!monitor)
+             {
+-                free(disconnected);
++                _glfw_free(disconnected);
+                 return;
+             }
+ 
+@@ -241,7 +241,7 @@ void _glfwPollMonitorsWin32(void)
+             _glfwInputMonitor(disconnected[i], GLFW_DISCONNECTED, 0);
+     }
+ 
+-    free(disconnected);
++    _glfw_free(disconnected);
+ }
+ 
+ // Change the current video mode
+@@ -442,7 +442,7 @@ GLFWvidmode* _glfwPlatformGetVideoModes(_GLFWmonitor* monitor, int* count)
+         if (*count == size)
+         {
+             size += 128;
+-            result = (GLFWvidmode*) realloc(result, size * sizeof(GLFWvidmode));
++            result = (GLFWvidmode*) _glfw_realloc(result, size * sizeof(GLFWvidmode));
+         }
+ 
+         (*count)++;
+@@ -452,7 +452,7 @@ GLFWvidmode* _glfwPlatformGetVideoModes(_GLFWmonitor* monitor, int* count)
+     if (!*count)
+     {
+         // HACK: Report the current mode if no valid modes were found
+-        result = calloc(1, sizeof(GLFWvidmode));
++        result = _glfw_calloc(1, sizeof(GLFWvidmode));
+         _glfwPlatformGetVideoMode(monitor, result);
+         *count = 1;
+     }
+diff --git a/src/win32_window.c b/src/win32_window.c
+index d17b6da..c9f2744 100644
+--- a/src/win32_window.c
++++ b/src/win32_window.c
+@@ -877,8 +877,8 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg,
+             GetRawInputData(ri, RID_INPUT, NULL, &size, sizeof(RAWINPUTHEADER));
+             if (size > (UINT) _glfw.win32.rawInputSize)
+             {
+-                free(_glfw.win32.rawInput);
+-                _glfw.win32.rawInput = calloc(size, 1);
++                _glfw_free(_glfw.win32.rawInput);
++                _glfw.win32.rawInput = _glfw_calloc(size, 1);
+                 _glfw.win32.rawInputSize = size;
+             }
+ 
+@@ -1178,7 +1178,7 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg,
+             int i;
+ 
+             const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
+-            char** paths = calloc(count, sizeof(char*));
++            char** paths = _glfw_calloc(count, sizeof(char*));
+ 
+             // Move the mouse to the position of the drop
+             DragQueryPoint(drop, &pt);
+@@ -1187,19 +1187,19 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg,
+             for (i = 0;  i < count;  i++)
+             {
+                 const UINT length = DragQueryFileW(drop, i, NULL, 0);
+-                WCHAR* buffer = calloc((size_t) length + 1, sizeof(WCHAR));
++                WCHAR* buffer = _glfw_calloc((size_t) length + 1, sizeof(WCHAR));
+ 
+                 DragQueryFileW(drop, i, buffer, length + 1);
+                 paths[i] = _glfwCreateUTF8FromWideStringWin32(buffer);
+ 
+-                free(buffer);
++                _glfw_free(buffer);
+             }
+ 
+             _glfwInputDrop(window, count, (const char**) paths);
+ 
+             for (i = 0;  i < count;  i++)
+-                free(paths[i]);
+-            free(paths);
++                _glfw_free(paths[i]);
++            _glfw_free(paths);
+ 
+             DragFinish(drop);
+             return 0;
+@@ -1262,7 +1262,7 @@ static int createNativeWindow(_GLFWwindow* window,
+                                            GetModuleHandleW(NULL),
+                                            (LPVOID) wndconfig);
+ 
+-    free(wideTitle);
++    _glfw_free(wideTitle);
+ 
+     if (!window->win32.handle)
+     {
+@@ -1461,7 +1461,7 @@ void _glfwPlatformSetWindowTitle(_GLFWwindow* window, const char* title)
+         return;
+ 
+     SetWindowTextW(window->win32.handle, wideTitle);
+-    free(wideTitle);
++    _glfw_free(wideTitle);
+ }
+ 
+ void _glfwPlatformSetWindowIcon(_GLFWwindow* window,
+@@ -2207,7 +2207,7 @@ const char* _glfwPlatformGetClipboardString(void)
+         return NULL;
+     }
+ 
+-    free(_glfw.win32.clipboardString);
++    _glfw_free(_glfw.win32.clipboardString);
+     _glfw.win32.clipboardString = _glfwCreateUTF8FromWideStringWin32(buffer);
+ 
+     GlobalUnlock(object);
+diff --git a/src/window.c b/src/window.c
+index 44de03b..6146875 100644
+--- a/src/window.c
++++ b/src/window.c
+@@ -186,7 +186,7 @@ GLFWAPI GLFWwindow* glfwCreateWindow(int width, int height,
+     if (!_glfwIsValidContextConfig(&ctxconfig))
+         return NULL;
+ 
+-    window = calloc(1, sizeof(_GLFWwindow));
++    window = _glfw_calloc(1, sizeof(_GLFWwindow));
+     window->next = _glfw.windowListHead;
+     _glfw.windowListHead = window;
+ 
+@@ -468,7 +468,7 @@ GLFWAPI void glfwDestroyWindow(GLFWwindow* handle)
+         *prev = window->next;
+     }
+ 
+-    free(window);
++    _glfw_free(window);
+ }
+ 
+ GLFWAPI int glfwWindowShouldClose(GLFWwindow* handle)
+diff --git a/src/wl_init.c b/src/wl_init.c
+index 49e7cc5..151c980 100644
+--- a/src/wl_init.c
++++ b/src/wl_init.c
+@@ -1202,7 +1202,7 @@ int _glfwPlatformInit(void)
+             wl_data_device_manager_get_data_device(_glfw.wl.dataDeviceManager,
+                                                    _glfw.wl.seat);
+         wl_data_device_add_listener(_glfw.wl.dataDevice, &dataDeviceListener, NULL);
+-        _glfw.wl.clipboardString = malloc(4096);
++        _glfw.wl.clipboardString = _glfw_malloc(4096);
+         if (!_glfw.wl.clipboardString)
+         {
+             _glfwInputError(GLFW_PLATFORM_ERROR,
+@@ -1303,9 +1303,9 @@ void _glfwPlatformTerminate(void)
+         close(_glfw.wl.cursorTimerfd);
+ 
+     if (_glfw.wl.clipboardString)
+-        free(_glfw.wl.clipboardString);
++        _glfw_free(_glfw.wl.clipboardString);
+     if (_glfw.wl.clipboardSendString)
+-        free(_glfw.wl.clipboardSendString);
++        _glfw_free(_glfw.wl.clipboardSendString);
+ }
+ 
+ const char* _glfwPlatformGetVersionString(void)
+diff --git a/src/wl_monitor.c b/src/wl_monitor.c
+index a7b05c6..524c225 100644
+--- a/src/wl_monitor.c
++++ b/src/wl_monitor.c
+@@ -77,7 +77,7 @@ static void outputHandleMode(void* data,
+ 
+     monitor->modeCount++;
+     monitor->modes =
+-        realloc(monitor->modes, monitor->modeCount * sizeof(GLFWvidmode));
++        _glfw_realloc(monitor->modes, monitor->modeCount * sizeof(GLFWvidmode));
+     monitor->modes[monitor->modeCount - 1] = mode;
+ 
+     if (flags & WL_OUTPUT_MODE_CURRENT)
+diff --git a/src/wl_window.c b/src/wl_window.c
+index d10861c..aca2e24 100644
+--- a/src/wl_window.c
++++ b/src/wl_window.c
+@@ -170,12 +170,12 @@ static int createAnonymousFile(off_t size)
+             return -1;
+         }
+ 
+-        name = calloc(strlen(path) + sizeof(template), 1);
++        name = _glfw_calloc(strlen(path) + sizeof(template), 1);
+         strcpy(name, path);
+         strcat(name, template);
+ 
+         fd = createTmpfileCloexec(name);
+-        free(name);
++        _glfw_free(name);
+         if (fd < 0)
+             return -1;
+     }
+@@ -440,7 +440,7 @@ static void surfaceHandleEnter(void *data,
+     {
+         ++window->wl.monitorsSize;
+         window->wl.monitors =
+-            realloc(window->wl.monitors,
++            _glfw_realloc(window->wl.monitors,
+                     window->wl.monitorsSize * sizeof(_GLFWmonitor*));
+     }
+ 
+@@ -981,7 +981,7 @@ int _glfwPlatformCreateWindow(_GLFWwindow* window,
+ 
+     window->wl.currentCursor = NULL;
+ 
+-    window->wl.monitors = calloc(1, sizeof(_GLFWmonitor*));
++    window->wl.monitors = _glfw_calloc(1, sizeof(_GLFWmonitor*));
+     window->wl.monitorsCount = 0;
+     window->wl.monitorsSize = 1;
+ 
+@@ -1029,14 +1029,14 @@ void _glfwPlatformDestroyWindow(_GLFWwindow* window)
+     if (window->wl.surface)
+         wl_surface_destroy(window->wl.surface);
+ 
+-    free(window->wl.title);
+-    free(window->wl.monitors);
++    _glfw_free(window->wl.title);
++    _glfw_free(window->wl.monitors);
+ }
+ 
+ void _glfwPlatformSetWindowTitle(_GLFWwindow* window, const char* title)
+ {
+     if (window->wl.title)
+-        free(window->wl.title);
++        _glfw_free(window->wl.title);
+     window->wl.title = _glfw_strdup(title);
+     if (window->wl.xdg.toplevel)
+         xdg_toplevel_set_title(window->wl.xdg.toplevel, title);
+@@ -1707,7 +1707,7 @@ void _glfwPlatformSetClipboardString(const char* string)
+ 
+     if (_glfw.wl.clipboardSendString)
+     {
+-        free(_glfw.wl.clipboardSendString);
++        _glfw_free(_glfw.wl.clipboardSendString);
+         _glfw.wl.clipboardSendString = NULL;
+     }
+ 
+@@ -1725,7 +1725,7 @@ void _glfwPlatformSetClipboardString(const char* string)
+     {
+         _glfwInputError(GLFW_PLATFORM_ERROR,
+                         "Wayland: Impossible to create clipboard source");
+-        free(_glfw.wl.clipboardSendString);
++        _glfw_free(_glfw.wl.clipboardSendString);
+         return;
+     }
+     wl_data_source_add_listener(_glfw.wl.dataSource,
+@@ -1741,7 +1741,7 @@ static GLFWbool growClipboardString(void)
+ {
+     char* clipboard = _glfw.wl.clipboardString;
+ 
+-    clipboard = realloc(clipboard, _glfw.wl.clipboardSize * 2);
++    clipboard = _glfw_realloc(clipboard, _glfw.wl.clipboardSize * 2);
+     if (!clipboard)
+     {
+         _glfwInputError(GLFW_PLATFORM_ERROR,
+diff --git a/src/x11_init.c b/src/x11_init.c
+index 87b3eb7..3f39211 100644
+--- a/src/x11_init.c
++++ b/src/x11_init.c
+@@ -1125,8 +1125,8 @@ void _glfwPlatformTerminate(void)
+         _glfw.x11.hiddenCursorHandle = (Cursor) 0;
+     }
+ 
+-    free(_glfw.x11.primarySelectionString);
+-    free(_glfw.x11.clipboardString);
++    _glfw_free(_glfw.x11.primarySelectionString);
++    _glfw_free(_glfw.x11.clipboardString);
+ 
+     if (_glfw.x11.im)
+     {
+diff --git a/src/x11_monitor.c b/src/x11_monitor.c
+index fb3a67b..d4b4436 100644
+--- a/src/x11_monitor.c
++++ b/src/x11_monitor.c
+@@ -116,7 +116,7 @@ void _glfwPollMonitorsX11(void)
+         disconnectedCount = _glfw.monitorCount;
+         if (disconnectedCount)
+         {
+-            disconnected = calloc(_glfw.monitorCount, sizeof(_GLFWmonitor*));
++            disconnected = _glfw_calloc(_glfw.monitorCount, sizeof(_GLFWmonitor*));
+             memcpy(disconnected,
+                    _glfw.monitors,
+                    _glfw.monitorCount * sizeof(_GLFWmonitor*));
+@@ -209,7 +209,7 @@ void _glfwPollMonitorsX11(void)
+                 _glfwInputMonitor(disconnected[i], GLFW_DISCONNECTED, 0);
+         }
+ 
+-        free(disconnected);
++        _glfw_free(disconnected);
+     }
+     else
+     {
+@@ -450,7 +450,7 @@ GLFWvidmode* _glfwPlatformGetVideoModes(_GLFWmonitor* monitor, int* count)
+         XRRCrtcInfo* ci = XRRGetCrtcInfo(_glfw.x11.display, sr, monitor->x11.crtc);
+         XRROutputInfo* oi = XRRGetOutputInfo(_glfw.x11.display, sr, monitor->x11.output);
+ 
+-        result = calloc(oi->nmode, sizeof(GLFWvidmode));
++        result = _glfw_calloc(oi->nmode, sizeof(GLFWvidmode));
+ 
+         for (int i = 0;  i < oi->nmode;  i++)
+         {
+@@ -482,7 +482,7 @@ GLFWvidmode* _glfwPlatformGetVideoModes(_GLFWmonitor* monitor, int* count)
+     else
+     {
+         *count = 1;
+-        result = calloc(1, sizeof(GLFWvidmode));
++        result = _glfw_calloc(1, sizeof(GLFWvidmode));
+         _glfwPlatformGetVideoMode(monitor, result);
+     }
+ 
+diff --git a/src/x11_window.c b/src/x11_window.c
+index d52ebc4..2017c12 100644
+--- a/src/x11_window.c
++++ b/src/x11_window.c
+@@ -406,8 +406,8 @@ static char** parseUriList(char* text, int* count)
+ 
+         (*count)++;
+ 
+-        char* path = calloc(strlen(line) + 1, 1);
+-        paths = realloc(paths, *count * sizeof(char*));
++        char* path = _glfw_calloc(strlen(line) + 1, 1);
++        paths = _glfw_realloc(paths, *count * sizeof(char*));
+         paths[*count - 1] = path;
+ 
+         while (*line)
+@@ -495,7 +495,7 @@ static char* convertLatin1toUTF8(const char* source)
+     for (sp = source;  *sp;  sp++)
+         size += (*sp & 0x80) ? 2 : 1;
+ 
+-    char* target = calloc(size, 1);
++    char* target = _glfw_calloc(size, 1);
+     char* tp = target;
+ 
+     for (sp = source;  *sp;  sp++)
+@@ -935,12 +935,12 @@ static void handleSelectionClear(XEvent* event)
+ {
+     if (event->xselectionclear.selection == _glfw.x11.PRIMARY)
+     {
+-        free(_glfw.x11.primarySelectionString);
++        _glfw_free(_glfw.x11.primarySelectionString);
+         _glfw.x11.primarySelectionString = NULL;
+     }
+     else
+     {
+-        free(_glfw.x11.clipboardString);
++        _glfw_free(_glfw.x11.clipboardString);
+         _glfw.x11.clipboardString = NULL;
+     }
+ }
+@@ -979,7 +979,7 @@ static const char* getSelectionString(Atom selection)
+         return *selectionString;
+     }
+ 
+-    free(*selectionString);
++    _glfw_free(*selectionString);
+     *selectionString = NULL;
+ 
+     for (size_t i = 0;  i < targetCount;  i++)
+@@ -1058,7 +1058,7 @@ static const char* getSelectionString(Atom selection)
+                 if (itemCount)
+                 {
+                     size += itemCount;
+-                    string = realloc(string, size);
++                    string = _glfw_realloc(string, size);
+                     string[size - itemCount - 1] = '\0';
+                     strcat(string, data);
+                 }
+@@ -1068,7 +1068,7 @@ static const char* getSelectionString(Atom selection)
+                     if (targets[i] == XA_STRING)
+                     {
+                         *selectionString = convertLatin1toUTF8(string);
+-                        free(string);
++                        _glfw_free(string);
+                     }
+                     else
+                         *selectionString = string;
+@@ -1306,7 +1306,7 @@ static void processEvent(XEvent *event)
+ 
+                     if (status == XBufferOverflow)
+                     {
+-                        chars = calloc(count + 1, 1);
++                        chars = _glfw_calloc(count + 1, 1);
+                         count = Xutf8LookupString(window->x11.ic,
+                                                   &event->xkey,
+                                                   chars, count,
+@@ -1333,7 +1333,7 @@ static void processEvent(XEvent *event)
+ 
+                     if (status == XBufferOverflow)
+                     {
+-                        chars = calloc(count, sizeof(wchar_t));
++                        chars = _glfw_calloc(count, sizeof(wchar_t));
+                         count = XwcLookupString(window->x11.ic,
+                                                 &event->xkey,
+                                                 chars, count,
+@@ -1349,7 +1349,7 @@ static void processEvent(XEvent *event)
+ #endif /*X_HAVE_UTF8_STRING*/
+ 
+                     if (chars != buffer)
+-                        free(chars);
++                        _glfw_free(chars);
+                 }
+             }
+             else
+@@ -1764,8 +1764,8 @@ static void processEvent(XEvent *event)
+                     _glfwInputDrop(window, count, (const char**) paths);
+ 
+                     for (i = 0;  i < count;  i++)
+-                        free(paths[i]);
+-                    free(paths);
++                        _glfw_free(paths[i]);
++                    _glfw_free(paths);
+                 }
+ 
+                 if (data)
+@@ -2123,7 +2123,7 @@ void _glfwPlatformSetWindowIcon(_GLFWwindow* window,
+         for (i = 0;  i < count;  i++)
+             longCount += 2 + images[i].width * images[i].height;
+ 
+-        long* icon = calloc(longCount, sizeof(long));
++        long* icon = _glfw_calloc(longCount, sizeof(long));
+         long* target = icon;
+ 
+         for (i = 0;  i < count;  i++)
+@@ -2147,7 +2147,7 @@ void _glfwPlatformSetWindowIcon(_GLFWwindow* window,
+                         (unsigned char*) icon,
+                         longCount);
+ 
+-        free(icon);
++        _glfw_free(icon);
+     }
+     else
+     {
+@@ -2972,7 +2972,7 @@ void _glfwPlatformSetCursor(_GLFWwindow* window, _GLFWcursor* cursor)
+ void _glfwPlatformSetClipboardString(const char* string)
+ {
+     char* copy = _glfw_strdup(string);
+-    free(_glfw.x11.clipboardString);
++    _glfw_free(_glfw.x11.clipboardString);
+     _glfw.x11.clipboardString = copy;
+ 
+     XSetSelectionOwner(_glfw.x11.display,
+@@ -3164,7 +3164,7 @@ GLFWAPI void glfwSetX11SelectionString(const char* string)
+ {
+     _GLFW_REQUIRE_INIT();
+ 
+-    free(_glfw.x11.primarySelectionString);
++    _glfw_free(_glfw.x11.primarySelectionString);
+     _glfw.x11.primarySelectionString = _glfw_strdup(string);
+ 
+     XSetSelectionOwner(_glfw.x11.display,

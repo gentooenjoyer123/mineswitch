@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "newlib_version": "4.6.0.20260123",
+  "devkita64_package_release": 4,
+  "packaging": {
+    "commit": "904af6a999c0e0af07be54b7120291efd649d364",
+    "url": "https://github.com/devkitPro/pacman-packages/blob/904af6a999c0e0af07be54b7120291efd649d364/devkita64/newlib/PKGBUILD"
+  },
+  "upstream_archive": {
+    "url": "https://sourceware.org/pub/newlib/newlib-4.6.0.20260123.tar.gz",
+    "sha256": "6ff27e3bf022666f43f7802255be680eeff722ac181b1725d21e2e8318604ee3"
+  },
+  "devkitpro_patch": {
+    "buildscripts_commit": "96819633754f9c99a4cb546fcdbc762e9451bac4",
+    "tag": "devkitA64_r29.2",
+    "url": "https://raw.githubusercontent.com/devkitPro/buildscripts/96819633754f9c99a4cb546fcdbc762e9451bac4/patches/newlib-4.6.0.20260123-4.patch",
+    "sha256": "6d5aba4356553c727765c98e7553d3784f31d361c856e220ef27cc26353fb88f",
+    "allocator_files_modified": false
+  },
+  "source_mirror": {
+    "commit": "57bd8e1ade3cf46d2e61a72516ac8bfaf8fdfd62",
+    "base_url": "https://raw.githubusercontent.com/devkitPro/newlib/57bd8e1ade3cf46d2e61a72516ac8bfaf8fdfd62/newlib/libc/stdlib/",
+    "matches_upstream_archive_members": true
+  },
+  "sources": {
+    "_mallocr.c": "a4b2809212a51a6d3af6e9e36274be9f4ff12b78bd1233bb06fe6ea5841c3bc8",
+    "mallocr.c": "d96c89bb5c9b7f462ffef23623c11c893d0f719f3767fb77271d85f43f0cd7f6",
+    "reallocr.c": "d58143515949e51a7dbe8c37c0f5599555720af2595e55d78c8c23b305879ce8",
+    "malignr.c": "771a834c59cea3f86fc1e33f21ac9e5a432766510588ec253df859ff604bdcdf"
+  },
+  "installed_sdk": {
+    "target": "aarch64-none-elf",
+    "gcc_version": "15.2.0",
+    "multilib": "pic",
+    "libc_sha256": "9bf41282aadf7957fe18b8c1fc71394bf255fca6175c8b449fd3f23ff387a362",
+    "allocator_members": {
+      "mallocr": "508cc757c34e604722b8d090cc46569332dac3dae80693941663f6d2d3132055",
+      "reallocr": "5af8d25c10ae485b9a7303ba2eb46315d33f22ca42f485a2a28ff4da1850c582",
+      "malignr": "05d2c3058952bad1cdadc5f86e751b7070e3fbcb211f51c4253e1beb20a93cb6"
+    }
+  }
+}

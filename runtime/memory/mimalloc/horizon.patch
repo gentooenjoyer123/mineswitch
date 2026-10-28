@@ -1,0 +1,100 @@
+diff --git a/include/mimalloc/atomic.h b/include/mimalloc/atomic.h
+index e8bac31..772e831 100644
+--- a/include/mimalloc/atomic.h
++++ b/include/mimalloc/atomic.h
+@@ -14,6 +14,8 @@ terms of the MIT license. A copy of the license can be found in the file
+ #define WIN32_LEAN_AND_MEAN
+ #endif
+ #include <windows.h>
++#elif defined(__SWITCH__)
++#include <switch/kernel/mutex.h>
+ #elif !defined(__wasi__) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__))
+ #define  MI_USE_PTHREADS
+ #include <pthread.h>
+@@ -478,6 +480,15 @@ static inline void mi_lock_done(mi_lock_t* lock) {
+ 
+ #endif
+ 
++#elif defined(__SWITCH__)
++
++#define mi_lock_t Mutex
++static inline bool mi_lock_try_acquire(mi_lock_t* lock) { return mutexTryLock(lock); }
++static inline void mi_lock_acquire(mi_lock_t* lock) { mutexLock(lock); }
++static inline void mi_lock_release(mi_lock_t* lock) { mutexUnlock(lock); }
++static inline void mi_lock_init(mi_lock_t* lock) { mutexInit(lock); }
++static inline void mi_lock_done(mi_lock_t* lock) { (void)lock; }
++
+ #elif defined(MI_USE_PTHREADS)
+ 
+ void _mi_error_message(int err, const char* fmt, ...);
+diff --git a/include/mimalloc/prim.h b/include/mimalloc/prim.h
+index 1087d9b..c0ffdcd 100644
+--- a/include/mimalloc/prim.h
++++ b/include/mimalloc/prim.h
+@@ -259,6 +259,7 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
+ // For now, we only enable this for specific platforms.
+ #if !defined(__APPLE__)  /* on apple (M1) the wrong register is read (tpidr_el0 instead of tpidrro_el0) so fall back to TLS slot assembly (<https://github.com/microsoft/mimalloc/issues/343#issuecomment-763272369>)*/ \
+     && !defined(__CYGWIN__) \
++    && !defined(__SWITCH__) \
+     && !defined(MI_LIBC_MUSL) \
+     && (!defined(__clang_major__) || __clang_major__ >= 14)  /* older clang versions emit bad code; fall back to using the TLS slot (<https://lore.kernel.org/linux-arm-kernel/202110280952.352F66D8@keescook/T/>) */
+   #if    (defined(__GNUC__) && (__GNUC__ >= 7)  && defined(__aarch64__)) /* aarch64 for older gcc versions (issue #851) */ \
+diff --git a/src/os.c b/src/os.c
+index 9b1b4b4..ac648a1 100644
+--- a/src/os.c
++++ b/src/os.c
+@@ -71,11 +71,18 @@ bool _mi_os_use_large_page(size_t size, size_t alignment) {
+ // round to a good OS allocation size (bounded by max 12.5% waste)
+ size_t _mi_os_good_alloc_size(size_t size) {
+   size_t align_size;
++#if defined(MI_MINESWITCH)
++  /* The Horizon backend has fixed, eagerly backed RAM and no large pages.
++   * Desktop-scale rounding is paid in real retained capacity (and can happen
++   * twice: payload and segment metadata). Keep the actual page granularity. */
++  align_size = _mi_os_page_size();
++#else
+   if (size < 512*MI_KiB) align_size = _mi_os_page_size();
+   else if (size < 2*MI_MiB) align_size = 64*MI_KiB;
+   else if (size < 8*MI_MiB) align_size = 256*MI_KiB;
+   else if (size < 32*MI_MiB) align_size = 1*MI_MiB;
+   else align_size = 4*MI_MiB;
++#endif
+   if mi_unlikely(size >= (SIZE_MAX - align_size)) return size; // possible overflow?
+   return _mi_align_up(size, align_size);
+ }
+@@ -410,6 +417,19 @@ void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offse
+ 
+     void* const p = (uint8_t*)start + extra;
+     mi_assert(_mi_is_aligned((uint8_t*)p + offset, alignment));
++#if defined(MI_MINESWITCH)
++    /* Decommit only revokes access in our eager page pool. Return the unused
++     * prefix instead, while retaining the whole actual segment and recording
++     * its adjusted ownership so later free cannot release the prefix twice. */
++    if (extra > 0 && mi_os_mem_config.has_partial_free &&
++        _mi_prim_free(start, extra) == 0) {
++      memid->mem.os.base = p;
++      memid->mem.os.size -= extra;
++      mi_os_stat_decrease(reserved, extra);
++      if (commit) { mi_os_stat_decrease(committed, extra); }
++      return p;
++    }
++#endif
+     // decommit the overallocation at the start
+     if (commit && extra > _mi_os_page_size()) {
+       _mi_os_decommit(start, extra);
+diff --git a/src/prim/prim.c b/src/prim/prim.c
+index 5147bae..2e68f27 100644
+--- a/src/prim/prim.c
++++ b/src/prim/prim.c
+@@ -8,7 +8,10 @@ terms of the MIT license. A copy of the license can be found in the file
+ // Select the implementation of the primitives
+ // depending on the OS.
+ 
+-#if defined(_WIN32)
++#if defined(MI_MINESWITCH)
++#include "prim_horizon.c"
++
++#elif defined(_WIN32)
+ #include "windows/prim.c"  // VirtualAlloc (Windows)
+ 
+ #elif defined(__APPLE__)
