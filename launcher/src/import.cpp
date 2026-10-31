@@ -55,9 +55,10 @@ void rememberSpelling(std::map<std::string, std::string>& names, const std::stri
 }
 struct Digest {
     mbedtls_md_context_t context;
-    explicit Digest(mbedtls_md_type_t kind) {
+    // The context's md_info is private in mbedTLS 3; keep our own pointer.
+    const mbedtls_md_info_t* info;
+    explicit Digest(mbedtls_md_type_t kind) : info(mbedtls_md_info_from_type(kind)) {
         mbedtls_md_init(&context);
-        const auto* info = mbedtls_md_info_from_type(kind);
         if (!info || mbedtls_md_setup(&context, info, 0) || mbedtls_md_starts(&context)) {
             mbedtls_md_free(&context);
             throw Error("hash", "Cannot initialize digest");
@@ -71,7 +72,7 @@ struct Digest {
     std::string finish() {
         unsigned char out[MBEDTLS_MD_MAX_SIZE];
         if (mbedtls_md_finish(&context, out)) throw Error("hash", "Cannot finish digest");
-        return hex(out, mbedtls_md_get_size(context.md_info));
+        return hex(out, mbedtls_md_get_size(info));
     }
 };
 struct HashCheck {

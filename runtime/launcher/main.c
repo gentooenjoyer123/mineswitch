@@ -302,7 +302,7 @@ static int run_java(void) {
     size_t experiments=0;
     for (int i=1;i<g_argc && strcmp(g_argv[i],"--");i++)
         if (!strncmp(g_argv[i],"--extra-jvm-option=",19)) experiments++;
-    JavaVMOption* combined=malloc((defaults+extra.count+experiments+3)*sizeof(*combined));
+    JavaVMOption* combined=malloc((defaults+extra.count+experiments+6)*sizeof(*combined));
     if (!combined) { free(cp_option); launcher_free_options(&extra); return 18; }
     memcpy(combined,options,sizeof(options));
     if (extra.count) memcpy(combined+defaults,extra.values,extra.count*sizeof(*combined));
@@ -313,14 +313,46 @@ static int run_java(void) {
             combined[option_count++]=(JavaVMOption){.optionString=g_argv[i]+19};
             printf("MINESWITCH_EXTRA_JVM_OPTION %s\n",g_argv[i]+19);
         }
+    u64 process_budget=0;
+    svcGetInfo(&process_budget,InfoType_TotalMemorySize,CUR_PROCESS_HANDLE,0);
+    /* The launch plan (or a development option) picks the collector; HotSpot
+       rejects two of them, so the default SerialGC gives way. */
+    for (size_t i=defaults;i<option_count;i++)
+        if (!strcmp(combined[i].optionString,"-XX:+UseParallelGC"))
+            for (size_t j=0;j<defaults;j++)
+                if (!strcmp(combined[j].optionString,"-XX:+UseSerialGC"))
+                    combined[j].optionString="-XX:+UseParallelGC";
 #ifdef MINESWITCH_COMPACT_VM
-    combined[option_count++]=(JavaVMOption){.optionString="-XX:ReservedCodeCacheSize=64m"};
-    // JDK21's threshold is percent allocated since last unloading, scaled by
-    // remaining space.40% avoids making threshold GCs more eager just because
-    // the reserved cache is smaller. Flushing and aggressive low-space GC stay on.
-    combined[option_count++]=(JavaVMOption){.optionString="-XX:SweeperThreshold=40"};
-    printf("MINESWITCH_COMPACT_VM code_cache_mib=64 sweeper_threshold_percent=40\n");
+    /* The 64 MiB cache only matters on a standard (~3.3 GiB) budget; consoles
+       with expanded memory keep JDK's tiered default of 240 MiB, so large
+       modpacks do not fill the cache and churn through flush/recompile. */
+    if (process_budget<=(u64)4608*1024*1024) {
+        combined[option_count++]=(JavaVMOption){.optionString="-XX:ReservedCodeCacheSize=64m"};
+        // JDK21's threshold is percent allocated since last unloading, scaled by
+        // remaining space.40% avoids making threshold GCs more eager just because
+        // the reserved cache is smaller. Flushing and aggressive low-space GC stay on.
+        combined[option_count++]=(JavaVMOption){.optionString="-XX:SweeperThreshold=40"};
+        printf("MINESWITCH_COMPACT_VM code_cache_mib=64 sweeper_threshold_percent=40\n");
+    } else {
+        combined[option_count++]=(JavaVMOption){.optionString="-XX:ReservedCodeCacheSize=240m"};
+        /* With the default 15% every ~36 MiB of new JIT code forced a full
+           collection ("CodeCache GC Threshold", 0.7-0.8 s on device), and the
+           ~21 MiB default MetaspaceSize did the same while mods load. */
+        combined[option_count++]=(JavaVMOption){.optionString="-XX:SweeperThreshold=40"};
+        combined[option_count++]=(JavaVMOption){.optionString="-XX:MetaspaceSize=256m"};
+        printf("MINESWITCH_COMPACT_VM disabled process_budget_mib=%" PRIu64 " code_cache_mib=240 sweeper_threshold_percent=40 metaspace_gc_mib=256\n",process_budget>>20);
+    }
 #endif
+    /* HOME launches have no NXLink stdout: keep GC pauses and code cache
+       warnings in a file the diagnostic NRO can fetch (--gc-log). */
+    mkdir("/switch/mineswitch/logs",0777);
+    /* filecount=0 appends (no rename-based rotation, which Horizon cannot
+       replace); start over once the file grows past 8 MiB. */
+    struct stat gc_log;
+    if (!stat("/switch/mineswitch/logs/jvm-gc.log",&gc_log) && gc_log.st_size>8*1024*1024)
+        unlink("/switch/mineswitch/logs/jvm-gc.log");
+    combined[option_count++]=(JavaVMOption){.optionString=
+        "-Xlog:gc=info,gc+cpu=info,codecache=warning:file=/switch/mineswitch/logs/jvm-gc.log:uptime,level,tags:filecount=0"};
     char initial_heap[64];
     if (heap_precommit) {
         const char* maximum=NULL;

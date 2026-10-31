@@ -853,6 +853,9 @@ class Application {
         settings.heap_mib = effectiveHeap(instance);
         if (settings.heap_mib > heap_budget_.max_mib)
             settings.heap_mib = heap_budget_.max_mib;
+        // ParallelGC's mark bitmap comes out of the native reserve.
+        if (useParallelGC(settings.gc, heap_budget_) && settings.heap_mib > parallelHeapLimit(heap_budget_))
+            settings.heap_mib = parallelHeapLimit(heap_budget_);
         settings.jvm_args = settings_.jvm_args + " " + instance.jvm_args;
         parseJvmArguments(settings.jvm_args);
         auto user = profile();
@@ -2230,6 +2233,26 @@ class Application {
                              settings_.full_initial_heap = !settings_.full_initial_heap;
                              storage_.saveSettings(settings_);
                          }});
+        {
+            bool parallel = useParallelGC(settings_.gc, heap_budget_);
+            std::string mode = settings_.gc == "auto" ? trf("Automatic ({0})", {parallel ? "ParallelGC" : "SerialGC"})
+                                                      : std::string(parallel ? "ParallelGC" : "SerialGC");
+            items.push_back({trf("Garbage collector: {0}", {mode}),
+                             tr(parallel ? "Collects on all CPU cores: shorter freezes, needs extra memory"
+                                         : "Single-threaded: least memory, longer pauses with a large heap"),
+                             [this] {
+                                 auto choose = [this](std::string value) {
+                                     settings_.gc = std::move(value);
+                                     storage_.saveSettings(settings_);
+                                 };
+                                 openMenu(tr("Garbage collector"),
+                                          trf("ParallelGC needs about 1/32 of the Java memory extra and allows up to {0} MB",
+                                              {std::to_string(parallelHeapLimit(heap_budget_))}),
+                                          {{tr("Automatic: ParallelGC on consoles with more memory"), [choose] { choose("auto"); }},
+                                           {"SerialGC", [choose] { choose("serial"); }},
+                                           {"ParallelGC", [choose] { choose("parallel"); }}});
+                             }});
+        }
         items.push_back({tr("JVM arguments for all instances"), settings_.jvm_args.empty() ? tr("None · -D…, -XX:… and -Xss… are allowed") : settings_.jvm_args, [this] {
                              edit(tr("JVM arguments"), settings_.jvm_args, 1000, [this](std::string text) {
                                  parseJvmArguments(text);

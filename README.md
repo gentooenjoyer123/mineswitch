@@ -20,10 +20,10 @@ Tested on a Switch OLED (Atmosphère, application mode):
 
 | Area | Result |
 | --- | --- |
-| JVM | OpenJDK 21 HotSpot for `aarch64-unknown-horizon`: template interpreter, C1 and C2, SerialGC, `-XX:+UseCompressedOops` |
+| JVM | OpenJDK 21 HotSpot for `aarch64-unknown-horizon`: template interpreter, C1 and C2, SerialGC and ParallelGC, `-XX:+UseCompressedOops` |
 | Graphics | NXVK (Vulkan, Mesa NVK fork) + Zink → OpenGL for LWJGL 3.3.3 |
 | Game | Minecraft 1.21.1 with **Fabric** — verified with the Fabulously Optimized modpack and with Fabric + Sodium: world generation, play, saving; ~87 FPS flying over a world |
-| Memory | Java heap up to **1900 MiB** (standard process budget); mimalloc 2.2.4 with a shared page pool and GPU buffer aliasing |
+| Memory | Java heap up to **1900 MiB** on the standard process budget, more on consoles with a RAM upgrade (ParallelGC is then the default); mimalloc 2.2.4 with a shared page pool and GPU buffer aliasing |
 | CPU | 4 cores via the NSP forwarder (core 3 unlocked in the NPDM) |
 | Startup | ~55 s to the title screen, ~63 s into a world |
 | Launcher | Instances, version/loader wizard, mods / resource packs / shaders from Modrinth and CurseForge with dependencies and updates, worlds, servers, screenshots, logs, import of `.mrpack` / CurseForge ZIP / MultiMC-PolyMC-Prism exports, packwiz packs |

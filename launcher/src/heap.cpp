@@ -20,6 +20,15 @@ int nextHeapOption(int current,int maximum) {
     for(int n:sizes)if(n>current && n<=maximum)return n;
     return current<maximum?maximum:std::min(512,maximum);
 }
+bool useParallelGC(const std::string& setting, const HeapBudget& budget) {
+    if (setting == "parallel") return true;
+    if (setting == "serial") return false;
+    return budget.max_mib > MINESWITCH_STANDARD_MAX_HEAP_MIB;
+}
+int parallelHeapLimit(const HeapBudget& budget) {
+    return budget.max_mib > MINESWITCH_STANDARD_MAX_HEAP_MIB ? std::max(MINESWITCH_STANDARD_MAX_HEAP_MIB, budget.max_mib - 1024)
+                                                            : budget.max_mib;
+}
 HeapBudget currentHeapBudget() {
     HeapBudget result;
 #ifdef __SWITCH__

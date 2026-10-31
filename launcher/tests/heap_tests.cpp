@@ -30,5 +30,13 @@ int main() {
         }
         assert(reached && mineswitch::nextHeapOption(maximum,maximum)==512);
     }
-    std::cout << "HEAP_POLICY_PASS standard, unknown, expanded process budgets and native reserve\n";
+    {   // Collector policy: auto picks ParallelGC only with expanded memory.
+        mineswitch::HeapBudget standard{3343908864ULL, mineswitch::heapLimitForProcessMemory(3343908864ULL)};
+        mineswitch::HeapBudget expanded{7302283264ULL, mineswitch::heapLimitForProcessMemory(7302283264ULL)};
+        assert(!mineswitch::useParallelGC("auto", standard) && mineswitch::useParallelGC("auto", expanded));
+        assert(mineswitch::useParallelGC("parallel", standard) && !mineswitch::useParallelGC("serial", expanded));
+        assert(mineswitch::parallelHeapLimit(standard) == 1900);
+        assert(mineswitch::parallelHeapLimit(expanded) == expanded.max_mib - 1024 && expanded.max_mib == 5900);
+    }
+    std::cout << "HEAP_POLICY_PASS standard, unknown, expanded process budgets, native reserve, collector policy\n";
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 #include "heap_limits.h"
 
 namespace mineswitch {
@@ -15,4 +16,9 @@ struct HeapBudget {
 int heapLimitForProcessMemory(std::uint64_t process_bytes);
 int nextHeapOption(int current_mib,int maximum_mib);
 HeapBudget currentHeapBudget();
+// ParallelGC collects on every core but needs ~heap/32 of native memory for
+// its mark bitmap; "auto" picks it only on expanded-memory consoles.
+bool useParallelGC(const std::string& setting, const HeapBudget&);
+// Heap ceiling with ParallelGC: 512 MiB of the native reserve stays for it.
+int parallelHeapLimit(const HeapBudget&);
 }

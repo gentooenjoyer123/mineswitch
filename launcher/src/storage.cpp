@@ -627,7 +627,7 @@ Settings Storage::loadSettings() {
     auto value = readJson(joinPath(root_, "settings.json"), kMaxSettings);
     if (!value) return result;
     checkFields(value.get(), {"schema", "root", "profile_id", "curseforge_key", "heap_mib",
-                            "reduced_motion", "show_incompatible"}, {"jvm_args", "library_sort", "full_initial_heap", "language"}, "settings");
+                            "reduced_motion", "show_incompatible"}, {"jvm_args", "library_sort", "full_initial_heap", "language", "gc"}, "settings");
     getInteger(value.get(), "schema", 1, 1);
     // Validate, but do not allow on-disk data to change the selected storage root.
     normalizeAbsolute(getString(value.get(), "root", kMaxPath, true));
@@ -650,6 +650,10 @@ Settings Storage::loadSettings() {
         result.language = getString(value.get(), "language", 8);
         if (result.language != "ru") result.language = "en";
     }
+    if (json_object_get(value.get(), "gc")) {
+        result.gc = getString(value.get(), "gc", 16);
+        if (result.gc != "serial" && result.gc != "parallel") result.gc = "auto";
+    }
     return result;
 }
 
@@ -669,6 +673,7 @@ void Storage::saveSettings(const Settings& settings) {
     setValue(value.get(), "library_sort", json_integer(settings.library_sort));
     setValue(value.get(), "full_initial_heap", json_boolean(settings.full_initial_heap));
     setString(value.get(), "language", settings.language == "ru" ? "ru" : "en", 8);
+    setString(value.get(), "gc", settings.gc == "serial" || settings.gc == "parallel" ? settings.gc : "auto", 16);
     initialize();
     atomicWriteJson(joinPath(root_, "settings.json"), value.get());
 }

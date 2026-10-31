@@ -17,8 +17,10 @@ case "$jvm_variant" in
     variant_options=(--with-libffi="$ffi_prefix")
     ;;
   server)
+    # ParallelGC is selectable at launch (multi-core collection for consoles
+    # with expanded memory); SerialGC stays the default collector.
     variant_options=(--enable-jvm-feature-compiler1 --enable-jvm-feature-compiler2 \
-      --disable-jvm-feature-jvmci)
+      --disable-jvm-feature-jvmci --enable-jvm-feature-parallelgc)
     ;;
   *)
     printf 'Unsupported Horizon JVM variant: %s (use zero or server).\n' "$jvm_variant" >&2

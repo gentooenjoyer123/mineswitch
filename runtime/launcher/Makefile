@@ -51,6 +51,12 @@ ifeq ($(MINESWITCH_JVM_VARIANT),server)
 # Demand the native HotSpot strong entry from libjvm before SDK's weak default.
 LDFLAGS += -Wl,-u,__libnx_exception_entry
 endif
+# JVM_ARCHIVE swaps in libjvm.a from another HotSpot configuration (for example
+# horizon-aarch64-server-pgc-release, which adds ParallelGC) without
+# regenerating the registry; the JDK libraries stay the same.
+ifneq ($(JVM_ARCHIVE),)
+MINESWITCH_JDK_ARCHIVES := $(JVM_ARCHIVE) $(filter-out %/libjvm.a,$(MINESWITCH_JDK_ARCHIVES))
+endif
 JDKLIBS := $(MINESWITCH_JDK_ARCHIVES) $(MINESWITCH_EXTRA_ARCHIVES)
 ifeq ($(ALLOCATOR_BACKEND),mimalloc)
 ALLOCATOR := $(ROOT)/runtime/memory/mimalloc/build/libmineswitch_mimalloc.a

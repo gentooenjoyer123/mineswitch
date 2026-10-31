@@ -16,10 +16,16 @@ extern char *fake_heap_end;
 
 static FILE *network_log;
 
+static bool dump_tail(const char *path);
 static bool dump_instance_log(const char *instance) {
     if(strlen(instance)!=32 || strspn(instance,"0123456789abcdef")!=32 || !network_log)return false;
     char path[192];
     snprintf(path,sizeof(path),"sdmc:/switch/mineswitch/instances/%s/game/logs/latest.log",instance);
+    return dump_tail(path);
+}
+/* Last 2 MiB of a fixed log file. */
+static bool dump_tail(const char *path) {
+    if(!network_log)return false;
     FILE *source=fopen(path,"rb");if(!source)return false;
     if(fseek(source,0,SEEK_END)!=0){fclose(source);return false;}
     long size=ftell(source);
@@ -205,6 +211,14 @@ int main(int argc, char **argv) {
     if(argc==2 && strncmp(argv[1],"--instance-log=",15)==0) {
         bool ok=dump_instance_log(argv[1]+15);
         report("Instance log read: %s\n",ok?"OK":"FAILED");
+        if(network_log){fclose(network_log);network_log=NULL;}
+        if(R_SUCCEEDED(socket_rc))socketExit();
+        consoleExit(NULL);
+        return ok?0:1;
+    }
+    if(argc==2 && strcmp(argv[1],"--gc-log")==0) {
+        bool ok=dump_tail("sdmc:/switch/mineswitch/logs/jvm-gc.log");
+        report("GC log read: %s\n",ok?"OK":"FAILED");
         if(network_log){fclose(network_log);network_log=NULL;}
         if(R_SUCCEEDED(socket_rc))socketExit();
         consoleExit(NULL);

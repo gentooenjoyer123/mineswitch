@@ -498,9 +498,11 @@ private:
         struct Digest {
             mbedtls_md_context_t context{};
             std::string expected;
-            Digest(mbedtls_md_type_t type, const std::string& wanted, std::size_t length) : expected(hex(wanted, length)) {
+            const mbedtls_md_info_t* info; // context.md_info is private in mbedTLS 3
+            Digest(mbedtls_md_type_t type, const std::string& wanted, std::size_t length)
+                : expected(hex(wanted, length)), info(mbedtls_md_info_from_type(type)) {
                 mbedtls_md_init(&context);
-                if (mbedtls_md_setup(&context, mbedtls_md_info_from_type(type), 0) || mbedtls_md_starts(&context)) {
+                if (mbedtls_md_setup(&context, info, 0) || mbedtls_md_starts(&context)) {
                     mbedtls_md_free(&context); throw Error("prepare_hash", "Cannot initialize artifact verification");
                 }
             }
@@ -509,7 +511,7 @@ private:
                 unsigned char bytes[MBEDTLS_MD_MAX_SIZE];
                 if (mbedtls_md_finish(&context, bytes)) throw Error("prepare_hash", "Cannot finish artifact verification");
                 std::string actual;
-                for (unsigned i = 0; i < mbedtls_md_get_size(context.md_info); ++i) { actual += "0123456789abcdef"[bytes[i] >> 4]; actual += "0123456789abcdef"[bytes[i] & 15]; }
+                for (unsigned i = 0; i < mbedtls_md_get_size(info); ++i) { actual += "0123456789abcdef"[bytes[i] >> 4]; actual += "0123456789abcdef"[bytes[i] & 15]; }
                 if (!expected.empty() && expected != actual) throw Error("hash_mismatch", "Published artifact digest mismatch");
                 return actual;
             }
@@ -1321,7 +1323,7 @@ int processor_count() {
 // Reuses a Ready instance's verified plan when every input that shapes it is
 // unchanged, skipping thousands of SD metadata checks. Full validation and any
 // changed setting take the normal path.
-std::optional<LaunchPlan> reuse_plan(const std::string& root, const Instance& instance, const Settings& settings,
+std::optional<LaunchPlan> reuse_plan(const std::string& collector, const std::string& root, const Instance& instance, const Settings& settings,
                                      const Profile& profile) {
     try {
         Json stored(readStoredJson(joinPath(root, "launch-plan.json"), kInstanceManifestMaxBytes));
@@ -1349,7 +1351,7 @@ std::optional<LaunchPlan> reuse_plan(const std::string& root, const Instance& in
             text("username") != profile.username || text("minecraft_version") != instance.game.minecraft_version ||
             text("loader") != instance.game.loader.version || number("heap_mib") != settings.heap_mib ||
             number("full_initial_heap") != (settings.full_initial_heap ? 1 : 0) || text("jvm_args") != settings.jvm_args ||
-            number("cpu_count") != processor_count())
+            number("cpu_count") != processor_count() || text("gc") != collector)
             return std::nullopt;
         LaunchPlan plan;
         plan.main_class = text("main_class");
@@ -1379,8 +1381,8 @@ std::vector<std::string> parseJvmArguments(const std::string& text) {
             token.find("Reserved") != std::string::npos)
             throw Error("jvm_args", "The launcher sets the JIT cache size");
         if (token.compare(0, 4, "-XX:") == 0 && token.find("GC") != std::string::npos &&
-            token.find("Use") != std::string::npos && token != "-XX:+UseSerialGC")
-            throw Error("jvm_args", "Only SerialGC is available in this Java");
+            token.find("Use") != std::string::npos)
+            throw Error("jvm_args", "Choose the garbage collector in Settings");
         result.push_back(token);
         if (result.size() > 64) throw Error("jvm_args", "Too many JVM arguments");
     }
@@ -1400,6 +1402,10 @@ LaunchPlan GamePreparer::prepare(Instance& instance, const Settings& settings, c
     const auto heap_budget = currentHeapBudget();
     if (settings.heap_mib < 256 || settings.heap_mib > heap_budget.max_mib)
         throw Error("prepare_heap", "Java maximum in this mode: " + std::to_string(heap_budget.max_mib) + " MB");
+    const bool parallel_gc = useParallelGC(settings.gc, heap_budget);
+    if (parallel_gc && settings.heap_mib > parallelHeapLimit(heap_budget))
+        throw Error("prepare_heap", "Java maximum with ParallelGC: " + std::to_string(parallelHeapLimit(heap_budget)) + " MB");
+    const std::string collector = parallel_gc ? "parallel" : "serial";
     if (instance.id.empty() || instance.id.size() > 64 || instance.id.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") != std::string::npos)
         throw Error("prepare_instance", "Invalid instance identifier");
     auto expected_root = joinPath(storage_.root(), "instances/" + instance.id);
@@ -1408,7 +1414,7 @@ LaunchPlan GamePreparer::prepare(Instance& instance, const Settings& settings, c
     if (instance.state == InstanceState::NeedsFiles) throw Error("prepare_missing_files", "Required pack files must be supplied before preparation");
     if (reuse_ready_plan && !force_validation && instance.state == InstanceState::Ready) {
         const auto started = std::chrono::steady_clock::now();
-        if (auto plan = reuse_plan(expected_root, instance, settings, profile)) {
+        if (auto plan = reuse_plan(collector, expected_root, instance, settings, profile)) {
             plan->preparation_summary = "PREPARATION_STATS fast_path=1 elapsed_ms=" + std::to_string(
                 std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count());
             if (progress) { try { progress({"ready", instance.name, 1, 1, 1, 1}); } catch (...) {} }
@@ -1471,6 +1477,7 @@ LaunchPlan GamePreparer::prepare(Instance& instance, const Settings& settings, c
             json_object_set_new(stored.get(), "full_initial_heap", json_integer(settings.full_initial_heap ? 1 : 0));
             set_string(stored.get(), "jvm_args", settings.jvm_args);
             json_object_set_new(stored.get(), "cpu_count", json_integer(processor_count()));
+            set_string(stored.get(), "gc", collector);
             json_object_set(stored.get(), "verified_artifacts", work.receipt());
             work.finish(plan, stored.get());
             atomicWriteJson(joinPath(instance.root, "launch-plan.json"), stored.get());
@@ -1617,7 +1624,8 @@ LaunchPlan GamePreparer::prepare(Instance& instance, const Settings& settings, c
                 "-Djava.home=" + java_path(runtime), "-Duser.dir=" + java_path(game),
                 "-Djava.io.tmpdir=" + java_path(joinPath(instance.root, "tmp")),
                 "-Djava.awt.headless=true", "-Djava.net.preferIPv4Stack=true", "-Dorg.lwjgl.system.allocator=system",
-                "-Dio.netty.transport.noNative=true", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=96m",
+                "-Dio.netty.transport.noNative=true", parallel_gc ? "-XX:+UseParallelGC" : "-XX:+UseSerialGC",
+                "-XX:ReservedCodeCacheSize=96m",
                 "-XX:InitialCodeCacheSize=8m", "-XX:-SegmentedCodeCache",
                 // A fourth core (forwarder NPDM) gets a third compiler thread.
                 std::string("-XX:CICompilerCount=") + (processor_count() >= 4 ? "3" : "2"),

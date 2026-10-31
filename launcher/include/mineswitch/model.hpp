@@ -111,6 +111,7 @@ struct Settings {
     int library_sort = 0; // 0 name, 1 last played, 2 Minecraft version.
     bool full_initial_heap = false; // -Xms equal to -Xmx instead of 256 MiB.
     std::string language = "en"; // UI language: "en" or "ru".
+    std::string gc = "auto";      // "auto", "serial" or "parallel".
 };
 struct Progress {
     std::string stage, detail;
